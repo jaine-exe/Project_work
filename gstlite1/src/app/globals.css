@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+:root {
+  /* Surfaces */
+  --bg: #F4F6F5;
+  --surface: #FFFFFF;
+  --surface-sunken: #ECF0EE;
+  --sidebar: #0C2E27;
+  --sidebar-hover: #123F35;
+  --sidebar-active: #0F6E5C;
+
+  /* Ink */
+  --ink: #10201B;
+  --ink-soft: #52655F;
+  --ink-faint: #8A9A94;
+  --ink-on-dark: #E7F0EC;
+  --ink-on-dark-soft: #9FB8AF;
+
+  /* Brand */
+  --primary: #0F6E5C;
+  --primary-dark: #0A4D40;
+  --primary-light: #E4F1EC;
+  --gold: #C08A2E;
+  --gold-light: #FBF0DC;
+
+  /* Status */
+  --success: #2E9E63;
+  --success-light: #E5F5EA;
+  --warning: #D8912B;
+  --warning-light: #FBF0DC;
+  --danger: #C8492F;
+  --danger-light: #FBE7E1;
+  --info: #2D6FA6;
+  --info-light: #E6F0F8;
+
+  /* Borders */
+  --border: #E1E7E3;
+  --border-soft: #EDF1EE;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  --font-display: "Plus Jakarta Sans";
+  --font-body: "Inter";
+  --font-mono: "IBM Plex Mono";
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, .font-display {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.font-mono-data {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+::selection {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+/* Focus visibility */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #C9D4CE;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B3C1BA;
+}
+
+/* Utility: card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.45s ease both;
+}
