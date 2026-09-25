@@ -1,7 +1,7 @@
 import { Bell, Search } from "lucide-react";
 import { readiness } from "@/lib/mock-data";
 
-export default function Topbar({ title, subtitle }) {
+export default function Topbar({ title, subtitle, action }) {
   return (
     <header
       className="sticky top-0 z-20 flex items-center justify-between gap-4 px-5 md:px-8 py-4 backdrop-blur"
@@ -19,6 +19,7 @@ export default function Topbar({ title, subtitle }) {
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
+        {action}
         <div
           className="hidden lg:flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium"
           style={{ background: "var(--warning-light)", color: "var(--warning)" }}

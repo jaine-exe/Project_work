@@ -2,13 +2,15 @@
 
 import { useEffect, useState, Fragment } from "react";
 import Topbar from "@/components/Topbar";
+import PeriodSelector, { formatPeriodName } from "@/components/PeriodSelector";
 import StatusPill from "@/components/StatusPill";
+import InvoiceReviewModal from "@/components/InvoiceReviewModal";
 import { gst as gstApi, invoices as invoicesApi, auth as authApi } from "@/lib/api";
-import { Download, FileCheck2, ChevronDown, Loader2 } from "lucide-react";
-
-const CURRENT_PERIOD = "2026-07"; // TODO: replace with a real period picker
+import { Download, FileCheck2, ChevronDown, Loader2, Edit3, Eye } from "lucide-react";
 
 export default function GstSummaryPage() {
+  const [periods, setPeriods] = useState(["2026-08", "2026-07", "2026-06"]);
+  const [selectedPeriod, setSelectedPeriod] = useState("2026-08");
   const [expanded, setExpanded] = useState(null);
   const [summary, setSummary] = useState(null);
   const [invoiceList, setInvoiceList] = useState([]);
@@ -17,16 +19,32 @@ export default function GstSummaryPage() {
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [reviewInvoice, setReviewInvoice] = useState(null);
 
   useEffect(() => {
+    gstApi.periods()
+      .then((res) => {
+        if (res?.periods?.length) {
+          setPeriods(res.periods);
+          if (res.default) {
+            setSelectedPeriod(res.default);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset loading state for a new fetch
     setLoading(true);
     setError("");
 
     Promise.all([
-      gstApi.summary(CURRENT_PERIOD),
-      invoicesApi.list(),
+      gstApi.summary(selectedPeriod),
+      invoicesApi.list(selectedPeriod),
       authApi.me(),
     ])
       .then(([summaryData, invoicesData, me]) => {
@@ -45,19 +63,36 @@ export default function GstSummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedPeriod]);
 
   async function handleGenerateReturn() {
     setGenerating(true);
     setGenerateError("");
     try {
-      await gstApi.generateReturn(CURRENT_PERIOD, "GSTR-3B");
+      await gstApi.generateReturn(selectedPeriod, "GSTR-3B");
       alert("Return generated successfully. File it from the returns list once you're ready.");
     } catch (err) {
       setGenerateError(err.message || "Couldn't generate the return");
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function handleExportPdf() {
+    setExportingPdf(true);
+    setExportError("");
+    try {
+      await gstApi.downloadSummaryPdf(selectedPeriod);
+    } catch (err) {
+      setExportError(err.message || "Failed to export PDF summary");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
+  function handleInvoiceUpdated(updated) {
+    setInvoiceList((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    gstApi.summary(selectedPeriod).then(setSummary).catch(() => {});
   }
 
   const cards = summary
@@ -75,7 +110,14 @@ export default function GstSummaryPage() {
     <div>
       <Topbar
         title="GST summary"
-        subtitle={`${CURRENT_PERIOD} · ${business?.scheme || "Regular"} scheme · ${business?.state || ""}`}
+        subtitle={`${formatPeriodName(selectedPeriod)} · ${business?.scheme || "Regular"} scheme · ${business?.state || ""}`}
+        action={
+          <PeriodSelector
+            periods={periods}
+            selectedPeriod={selectedPeriod}
+            onChange={setSelectedPeriod}
+          />
+        }
       />
 
       <div className="px-5 md:px-8 py-6 flex flex-col gap-6">
@@ -161,12 +203,19 @@ export default function GstSummaryPage() {
                     {generating ? <Loader2 size={16} className="animate-spin" /> : <FileCheck2 size={16} />}
                     {generating ? "Generating…" : "Generate GSTR-3B"}
                   </button>
+                  {exportError && (
+                    <p className="text-xs mb-1" style={{ color: "var(--danger)" }}>
+                      {exportError}
+                    </p>
+                  )}
                   <button
-                    className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold"
+                    onClick={handleExportPdf}
+                    disabled={exportingPdf}
+                    className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity disabled:opacity-60 cursor-pointer"
                     style={{ background: "var(--surface-sunken)", color: "var(--ink)" }}
                   >
-                    <Download size={16} />
-                    Export summary (PDF)
+                    {exportingPdf ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                    {exportingPdf ? "Generating PDF…" : "Export summary (PDF)"}
                   </button>
                 </div>
               </div>
@@ -176,7 +225,7 @@ export default function GstSummaryPage() {
                 <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border-soft)" }}>
                   <h3 className="font-display font-bold text-[15px]">Invoice ledger</h3>
                   <span className="text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
-                    {invoiceList.length} invoices this period
+                    {invoiceList.length} invoices {selectedPeriod === "all" ? "across all periods" : `for ${formatPeriodName(selectedPeriod)}`}
                   </span>
                 </div>
                 {invoiceList.length === 0 ? (
@@ -191,10 +240,12 @@ export default function GstSummaryPage() {
                       <thead>
                         <tr style={{ color: "var(--ink-faint)" }}>
                           <th className="text-left font-medium px-5 py-2.5 text-xs">Invoice</th>
+                          <th className="text-left font-medium px-3 py-2.5 text-xs">Type</th>
                           <th className="text-left font-medium px-3 py-2.5 text-xs">HSN</th>
                           <th className="text-right font-medium px-3 py-2.5 text-xs">Amount</th>
                           <th className="text-right font-medium px-3 py-2.5 text-xs">Rate</th>
                           <th className="text-left font-medium px-5 py-2.5 text-xs">Status</th>
+                          <th className="text-right font-medium px-4 py-2.5 text-xs">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -202,11 +253,11 @@ export default function GstSummaryPage() {
                           <Fragment key={inv.id}>
                             <tr
                               onClick={() => setExpanded(expanded === inv.id ? null : inv.id)}
-                              className="cursor-pointer"
+                              className="cursor-pointer hover:bg-slate-50/50 transition-colors"
                               style={{ borderTop: "1px solid var(--border-soft)" }}
                             >
                               <td className="px-5 py-3">
-                                <span className="flex items-center gap-1.5 font-mono-data text-xs" style={{ color: "var(--ink)" }}>
+                                <div className="flex items-center gap-1.5 font-mono-data text-xs" style={{ color: "var(--ink)" }}>
                                   <ChevronDown
                                     size={13}
                                     style={{
@@ -215,14 +266,30 @@ export default function GstSummaryPage() {
                                       transition: "transform 0.2s",
                                     }}
                                   />
-                                  {inv.display_id}
+                                  <span className="font-bold">{inv.invoice_number || inv.display_id}</span>
+                                  {inv.invoice_number && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-normal" style={{ background: "var(--surface-sunken)", color: "var(--ink-soft)" }}>
+                                      {inv.display_id}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
+                                  style={{
+                                    background: inv.document_type === "sales" ? "var(--warning-light)" : "var(--primary-light)",
+                                    color: inv.document_type === "sales" ? "var(--warning)" : "var(--primary)",
+                                  }}
+                                >
+                                  {inv.document_type === "sales" ? "Sales" : "Purchase"}
                                 </span>
                               </td>
                               <td className="px-3 py-3 font-mono-data text-xs" style={{ color: "var(--ink-soft)" }}>
                                 {inv.hsn_code || "—"}
                               </td>
                               <td className="px-3 py-3 text-right font-mono-data" style={{ color: "var(--ink)" }}>
-                                {inv.amount ? `₹${inv.amount.toLocaleString("en-IN")}` : "—"}
+                                {(inv.total_amount || inv.amount) ? `₹${(inv.total_amount || inv.amount).toLocaleString("en-IN")}` : "—"}
                               </td>
                               <td className="px-3 py-3 text-right" style={{ color: "var(--ink)" }}>
                                 {inv.tax_rate != null ? `${inv.tax_rate}%` : "—"}
@@ -230,15 +297,50 @@ export default function GstSummaryPage() {
                               <td className="px-5 py-3">
                                 <StatusPill tone={inv.status} />
                               </td>
+                              <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setReviewInvoice(inv)}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded border hover:bg-slate-100 transition-colors"
+                                  style={{ borderColor: "var(--border)", color: "var(--primary)" }}
+                                >
+                                  <Edit3 size={12} />
+                                  Review & Edit
+                                </button>
+                              </td>
                             </tr>
                             {expanded === inv.id && (
                               <tr style={{ background: "var(--surface-sunken)" }}>
-                                <td colSpan={5} className="px-5 py-3.5 text-xs" style={{ color: "var(--ink-soft)" }}>
+                                <td colSpan={7} className="px-5 py-3.5 text-xs" style={{ color: "var(--ink-soft)" }}>
+                                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                                        Invoice Record Inspection
+                                      </span>
+                                      {inv.original_filename && (
+                                        <span className="text-xs text-slate-400 font-mono-data">({inv.original_filename})</span>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => setReviewInvoice(inv)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity shadow-sm cursor-pointer"
+                                      style={{ background: "var(--primary)" }}
+                                    >
+                                      <Eye size={13} />
+                                      View Document & Edit Fields
+                                    </button>
+                                  </div>
+
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    <div>
+                                      <p style={{ color: "var(--ink-faint)" }}>Original Invoice No</p>
+                                      <p className="font-semibold mt-0.5 font-mono-data" style={{ color: "var(--ink)" }}>
+                                        {inv.invoice_number || inv.display_id}
+                                      </p>
+                                    </div>
                                     <div>
                                       <p style={{ color: "var(--ink-faint)" }}>Vendor</p>
                                       <p className="font-medium mt-0.5" style={{ color: "var(--ink)" }}>
-                                        {inv.vendor_name || "Not extracted"}
+                                        {inv.vendor_name || "—"}
                                       </p>
                                     </div>
                                     <div>
@@ -248,24 +350,58 @@ export default function GstSummaryPage() {
                                       </p>
                                     </div>
                                     <div>
-                                      <p style={{ color: "var(--ink-faint)" }}>Invoice date</p>
+                                      <p style={{ color: "var(--ink-faint)" }}>Billed To (Buyer)</p>
                                       <p className="font-medium mt-0.5" style={{ color: "var(--ink)" }}>
+                                        {inv.buyer_name || "—"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p style={{ color: "var(--ink-faint)" }}>Invoice Date</p>
+                                      <p className="font-medium mt-0.5 font-mono-data" style={{ color: "var(--ink)" }}>
                                         {inv.invoice_date || "—"}
                                       </p>
                                     </div>
                                     <div>
-                                      <p style={{ color: "var(--ink-faint)" }}>Risk</p>
-                                      <div className="mt-0.5">
-                                        <StatusPill tone={inv.risk} />
-                                      </div>
+                                      <p style={{ color: "var(--ink-faint)" }}>Taxable Subtotal</p>
+                                      <p className="font-semibold mt-0.5 font-mono-data" style={{ color: "var(--ink)" }}>
+                                        {inv.taxable_amount ? `₹${inv.taxable_amount.toLocaleString("en-IN")}` : (inv.amount ? `₹${inv.amount.toLocaleString("en-IN")}` : "—")}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p style={{ color: "var(--ink-faint)" }}>CGST / SGST / IGST</p>
+                                      <p className="font-mono-data mt-0.5" style={{ color: "var(--ink)" }}>
+                                        {inv.cgst_amount ? `CGST: ₹${inv.cgst_amount.toLocaleString("en-IN")}` : ""}
+                                        {inv.sgst_amount ? ` · SGST: ₹${inv.sgst_amount.toLocaleString("en-IN")}` : ""}
+                                        {inv.igst_amount ? ` · IGST: ₹${inv.igst_amount.toLocaleString("en-IN")}` : ""}
+                                        {!inv.cgst_amount && !inv.sgst_amount && !inv.igst_amount && "—"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p style={{ color: "var(--ink-faint)" }}>Total Invoice Value</p>
+                                      <p className="font-bold mt-0.5 font-mono-data" style={{ color: "var(--primary)" }}>
+                                        {(inv.total_amount || inv.amount) ? `₹${(inv.total_amount || inv.amount).toLocaleString("en-IN")}` : "—"}
+                                      </p>
                                     </div>
                                   </div>
                                   {inv.issues.length > 0 && (
-                                    <div className="mt-3 flex flex-col gap-1">
+                                    <div className="mt-3 flex flex-col gap-1.5 pt-3" style={{ borderTop: "1px solid var(--border-soft)" }}>
                                       {inv.issues.map((issue) => (
-                                        <p key={issue.id} style={{ color: "var(--danger)" }}>
-                                          ⚠ {issue.title}
-                                        </p>
+                                        <div key={issue.id} className="p-2 rounded flex items-start gap-2" style={{ background: issue.severity === "high" ? "var(--danger-light)" : "var(--warning-light)" }}>
+                                          <span style={{ color: issue.severity === "high" ? "var(--danger)" : "var(--warning)" }}>⚠</span>
+                                          <div>
+                                            <p className="font-semibold" style={{ color: issue.severity === "high" ? "var(--danger)" : "var(--warning)" }}>
+                                              {issue.title}
+                                            </p>
+                                            <p className="text-[11px] mt-0.5" style={{ color: "var(--ink)" }}>
+                                              {issue.description}
+                                            </p>
+                                            {issue.suggestion && (
+                                              <p className="text-[10px] mt-0.5" style={{ color: "var(--ink-soft)" }}>
+                                                <b>Fix:</b> {issue.suggestion}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
                                       ))}
                                     </div>
                                   )}
@@ -283,6 +419,13 @@ export default function GstSummaryPage() {
           </>
         )}
       </div>
+
+      <InvoiceReviewModal
+        invoice={reviewInvoice}
+        isOpen={Boolean(reviewInvoice)}
+        onClose={() => setReviewInvoice(null)}
+        onSaveSuccess={handleInvoiceUpdated}
+      />
     </div>
   );
 }

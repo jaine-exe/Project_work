@@ -114,6 +114,63 @@ def check_2b_reconciliation(
     return findings
 
 
+def check_buyer_taxpayer_match(
+    parsed_data: Dict[str, Any], business: Optional[Any] = None
+) -> List[Finding]:
+    """
+    Checks if the invoice buyer matches the registered taxpayer entity.
+    """
+    findings = []
+    buyer_name = parsed_data.get("buyer_name")
+    buyer_gstin = parsed_data.get("buyer_gstin")
+
+    taxpayer_name = getattr(business, "name", None) if business else parsed_data.get("taxpayer_name")
+    taxpayer_gstin = getattr(business, "gstin", None) if business else parsed_data.get("taxpayer_gstin")
+
+    if not taxpayer_name:
+        taxpayer_name = "Ashoka Textiles Pvt. Ltd."
+    if not taxpayer_gstin:
+        taxpayer_gstin = "32AACCA1234F1Z5"
+
+    if buyer_name:
+        clean_buyer = re.sub(r"[^a-zA-Z0-9]", "", buyer_name.lower())
+        clean_taxpayer = re.sub(r"[^a-zA-Z0-9]", "", taxpayer_name.lower())
+
+        if clean_buyer and clean_taxpayer and clean_buyer not in clean_taxpayer and clean_taxpayer not in clean_buyer:
+            findings.append(
+                Finding(
+                    title="Buyer / Taxpayer Entity Mismatch",
+                    severity="high",
+                    description=(
+                        f"Invoice is billed to '{buyer_name}', but your registered GST taxpayer profile "
+                        f"is '{taxpayer_name}' ({taxpayer_gstin})."
+                    ),
+                    suggestion=(
+                        "Verify whether this invoice belongs to the selected taxpayer. "
+                        "Input Tax Credit (ITC) cannot be claimed on invoices billed to an unlinked entity."
+                    ),
+                    rule_reference="CGST Act Section 16(2)(a) & Rule 36(1)",
+                )
+            )
+
+    if buyer_gstin and taxpayer_gstin:
+        if str(buyer_gstin).upper().strip() != str(taxpayer_gstin).upper().strip():
+            findings.append(
+                Finding(
+                    title="Buyer GSTIN Mismatch",
+                    severity="high",
+                    description=(
+                        f"Invoice recipient GSTIN '{buyer_gstin}' does not match your registered GSTIN "
+                        f"'{taxpayer_gstin}'."
+                    ),
+                    suggestion="Verify that the vendor issued the invoice to your correct 15-digit GSTIN.",
+                    rule_reference="CGST Section 16(2)(aa) & Rule 36(1)",
+                )
+            )
+
+    return findings
+
+
 def calculate_compliance_score(findings: List[Any]) -> int:
     """Calculates compliance score (base 100) from list of findings."""
     score = 100
@@ -141,6 +198,7 @@ def risk_from_findings(findings: List[Any]) -> str:
 def run_all_checks(
     parsed_data: Optional[Dict[str, Any]] = None,
     known_2b_gstins: Optional[set] = None,
+    business: Optional[Any] = None,
     vendor_gstin: Optional[str] = None,
     amount: Optional[float] = None,
     tax_rate: Optional[float] = None,
@@ -171,6 +229,7 @@ def run_all_checks(
     findings.extend(check_gstin_validity(parsed_data))
     findings.extend(check_tax_calculation(parsed_data))
     findings.extend(check_2b_reconciliation(parsed_data, known_2b_gstins))
+    findings.extend(check_buyer_taxpayer_match(parsed_data, business=business))
 
     score = calculate_compliance_score(findings)
     risk = risk_from_findings(findings)

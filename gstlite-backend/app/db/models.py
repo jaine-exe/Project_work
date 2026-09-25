@@ -103,9 +103,18 @@ class Invoice(Base):
     compliance_score: Mapped[int] = mapped_column(Integer, default=100)
 
     # Extracted / parsed fields (filled in by the OCR + AI pipeline)
+    invoice_number: Mapped[str | None] = mapped_column(String, nullable=True)
     vendor_name: Mapped[str | None] = mapped_column(String, nullable=True)
     vendor_gstin: Mapped[str | None] = mapped_column(String, nullable=True)
+    buyer_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    buyer_gstin: Mapped[str | None] = mapped_column(String, nullable=True)
     invoice_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    taxable_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cgst_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sgst_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    igst_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_tax: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     tax_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     hsn_code: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -119,6 +128,12 @@ class Invoice(Base):
     issues: Mapped[list["ComplianceIssue"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan"
     )
+
+    @property
+    def invoice_type(self) -> str:
+        if self.document_type:
+            return getattr(self.document_type, "value", str(self.document_type))
+        return "purchase"
 
 
 class ComplianceIssue(Base):
@@ -165,3 +180,23 @@ class GstReturn(Base):
     is_filed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Gstr2bEntry(Base):
+    __tablename__ = "gstr2b_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id"))
+
+    period: Mapped[str] = mapped_column(String, index=True)  # e.g. "2026-07"
+    supplier_gstin: Mapped[str] = mapped_column(String, index=True)
+    supplier_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    invoice_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    invoice_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    invoice_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    taxable_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tax_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tax_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    itc_available: Mapped[str] = mapped_column(String, default="Y")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

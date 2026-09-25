@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Optional external services
     OPENAI_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None  # Added Groq API Key support
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     OCR_PROVIDER: str = "mock"  # "mock" | "tesseract" | "paddleocr"
 
     # CORS — the Next.js frontend origin(s)

@@ -72,13 +72,23 @@ export const auth = {
 
 // ---- Invoices ----
 export const invoices = {
-  upload: (file) => {
+  upload: (file, documentType = "purchase") => {
     const form = new FormData();
     form.append("file", file);
+    form.append("document_type", documentType);
     return request("/api/invoices", { method: "POST", body: form, isForm: true });
   },
-  list: () => request("/api/invoices"),
+  list: (period) => request(`/api/invoices${period ? `?period=${period}` : ""}`),
   get: (id) => request(`/api/invoices/${id}`),
+  update: (id, payload) => request(`/api/invoices/${id}`, { method: "PATCH", body: payload }),
+  getFileBlob: async (id) => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/invoices/${id}/file`, { headers });
+    if (!res.ok) throw new Error("Could not load invoice file");
+    return await res.blob();
+  },
 };
 
 // ---- Compliance ----
@@ -86,10 +96,24 @@ export const compliance = {
   issues: (severity) =>
     request(`/api/compliance/issues${severity && severity !== "all" ? `?severity=${severity}` : ""}`),
   readiness: () => request("/api/compliance/readiness"),
+  reconciliation: (period) =>
+    request(`/api/compliance/gstr2b/reconciliation${period ? `?period=${period}` : ""}`),
+  upload2b: (file, period = "2026-07") => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("period", period);
+    return request("/api/compliance/gstr2b/upload", { method: "POST", body: form, isForm: true });
+  },
+  seedDemo2b: (period = "2026-07") => {
+    const form = new FormData();
+    form.append("period", period);
+    return request("/api/compliance/gstr2b/demo", { method: "POST", body: form, isForm: true });
+  },
 };
 
 // ---- GST ----
 export const gst = {
+  periods: () => request("/api/gst/periods"),
   summary: (period) => request(`/api/gst/summary${period ? `?period=${period}` : ""}`),
   generateReturn: (period, returnType = "GSTR-3B") =>
     request("/api/gst/returns/generate", {
@@ -97,6 +121,27 @@ export const gst = {
       body: { period, return_type: returnType },
     }),
   fileReturn: (returnId) => request(`/api/gst/returns/${returnId}/file`, { method: "POST" }),
+  downloadSummaryPdf: async (period = "2026-08") => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/api/gst/summary/export-pdf?period=${period}`, {
+      headers,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to download PDF (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `GST_Summary_${period}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 // ---- Chat ----
@@ -104,6 +149,7 @@ export const chat = {
   history: () => request("/api/chat/history"),
   ask: (message, invoiceId) =>
     request("/api/chat/ask", { method: "POST", body: { message, invoice_id: invoiceId ?? null } }),
+  clear: () => request("/api/chat/history", { method: "DELETE" }),
 };
 
 export { API_BASE };

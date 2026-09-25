@@ -6,16 +6,16 @@ import SummaryCard from "@/components/SummaryCard";
 import ReadinessRing from "@/components/ReadinessRing";
 import PipelineStepper from "@/components/PipelineStepper";
 import StatusPill from "@/components/StatusPill";
+import PeriodSelector, { formatPeriodName } from "@/components/PeriodSelector";
+import InvoiceReviewModal from "@/components/InvoiceReviewModal";
 import {
   compliance as complianceApi,
   gst as gstApi,
   invoices as invoicesApi,
   auth as authApi,
 } from "@/lib/api";
-import { UploadCloud, MessageCircleMore, ArrowRight, AlertTriangle, Loader2 } from "lucide-react";
+import { UploadCloud, MessageCircleMore, ArrowRight, AlertTriangle, Loader2, Edit3 } from "lucide-react";
 import Link from "next/link";
-
-const CURRENT_PERIOD = "2026-07";
 
 const STATUS_TO_STAGE = {
   uploaded: "uploaded",
@@ -27,6 +27,8 @@ const STATUS_TO_STAGE = {
 };
 
 export default function DashboardPage() {
+  const [periods, setPeriods] = useState(["2026-08", "2026-07", "2026-06"]);
+  const [selectedPeriod, setSelectedPeriod] = useState("2026-08");
   const [readiness, setReadiness] = useState(null);
   const [summary, setSummary] = useState(null);
   const [invoiceList, setInvoiceList] = useState([]);
@@ -34,17 +36,38 @@ export default function DashboardPage() {
   const [business, setBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reviewInvoice, setReviewInvoice] = useState(null);
+
+  function handleInvoiceUpdated(updated) {
+    setInvoiceList((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    gstApi.summary(selectedPeriod).then(setSummary).catch(() => {});
+    complianceApi.readiness().then(setReadiness).catch(() => {});
+    complianceApi.issues("high").then(setIssues).catch(() => {});
+  }
 
   useEffect(() => {
+    gstApi.periods()
+      .then((res) => {
+        if (res?.periods?.length) {
+          setPeriods(res.periods);
+          if (res.default) {
+            setSelectedPeriod(res.default);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset loading state for a new fetch
     setLoading(true);
     setError("");
 
     Promise.all([
       complianceApi.readiness(),
-      gstApi.summary(CURRENT_PERIOD),
-      invoicesApi.list(),
+      gstApi.summary(selectedPeriod),
+      invoicesApi.list(selectedPeriod),
       complianceApi.issues("high"),
       authApi.me(),
     ])
@@ -66,7 +89,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedPeriod]);
 
   const recentInvoices = invoiceList.slice(0, 5);
   const topIssues = issues.slice(0, 2);
@@ -146,7 +169,14 @@ export default function DashboardPage() {
     <div>
       <Topbar
         title={`Welcome back${business ? `, ${business.name.split(" ")[0]}` : ""}`}
-        subtitle={business ? `${business.gstin} · ${business.state} · Filing period ${CURRENT_PERIOD}` : ""}
+        subtitle={business ? `${business.gstin} · ${business.state} · ${formatPeriodName(selectedPeriod)}` : ""}
+        action={
+          <PeriodSelector
+            periods={periods}
+            selectedPeriod={selectedPeriod}
+            onChange={setSelectedPeriod}
+          />
+        }
       />
 
       <div className="px-5 md:px-8 py-6 flex flex-col gap-6">
@@ -176,14 +206,19 @@ export default function DashboardPage() {
 
           <div className="card p-6 flex flex-col justify-between gap-5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--ink-faint)" }}>
-                Filing period
-              </p>
-              <p className="text-sm mt-3" style={{ color: "var(--ink)" }}>
-                Current period: <span className="font-mono-data">{CURRENT_PERIOD}</span>
-              </p>
-              <p className="text-sm mt-2" style={{ color: "var(--ink-soft)" }}>
-                {invoiceList.length} invoice{invoiceList.length === 1 ? "" : "s"} uploaded this period.
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--ink-faint)" }}>
+                  Filing period
+                </p>
+                <span className="text-xs font-mono-data px-2 py-0.5 rounded font-semibold" style={{ background: "var(--surface-sunken)", color: "var(--primary)" }}>
+                  {selectedPeriod}
+                </span>
+              </div>
+              <h4 className="font-display font-bold text-lg mt-2" style={{ color: "var(--ink)" }}>
+                {formatPeriodName(selectedPeriod)}
+              </h4>
+              <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+                {invoiceList.length} invoice{invoiceList.length === 1 ? "" : "s"} in this period.
               </p>
             </div>
             <Link
@@ -229,25 +264,41 @@ export default function DashboardPage() {
                       <th className="text-right font-medium px-3 py-2.5 text-xs">Amount</th>
                       <th className="text-left font-medium px-3 py-2.5 text-xs">Status</th>
                       <th className="text-left font-medium px-5 py-2.5 text-xs">Risk</th>
+                      <th className="text-right font-medium px-5 py-2.5 text-xs">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentInvoices.map((inv) => (
                       <tr key={inv.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
                         <td className="px-5 py-3 font-mono-data text-xs" style={{ color: "var(--ink)" }}>
-                          {inv.display_id}
+                          <span className="font-semibold">{inv.invoice_number || inv.display_id}</span>
+                          {inv.invoice_number && (
+                            <span className="text-[10px] ml-1.5 px-1 py-0.5 rounded font-normal" style={{ background: "var(--surface-sunken)", color: "var(--ink-soft)" }}>
+                              {inv.display_id}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-3" style={{ color: "var(--ink)" }}>
                           {inv.vendor_name || "—"}
                         </td>
                         <td className="px-3 py-3 text-right font-mono-data" style={{ color: "var(--ink)" }}>
-                          {inv.amount ? `₹${inv.amount.toLocaleString("en-IN")}` : "—"}
+                          {(inv.total_amount || inv.amount) ? `₹${(inv.total_amount || inv.amount).toLocaleString("en-IN")}` : "—"}
                         </td>
                         <td className="px-3 py-3">
                           <StatusPill tone={inv.status} />
                         </td>
                         <td className="px-5 py-3">
                           <StatusPill tone={inv.risk} />
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setReviewInvoice(inv)}
+                            className="rounded-lg px-2.5 py-1 text-xs font-semibold hover:opacity-90 inline-flex items-center gap-1"
+                            style={{ background: "var(--primary-subtle)", color: "var(--primary)" }}
+                          >
+                            <Edit3 size={11} /> Review
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -307,6 +358,15 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {reviewInvoice && (
+          <InvoiceReviewModal
+            invoice={reviewInvoice}
+            isOpen={Boolean(reviewInvoice)}
+            onClose={() => setReviewInvoice(null)}
+            onSaveSuccess={handleInvoiceUpdated}
+          />
+        )}
       </div>
     </div>
   );

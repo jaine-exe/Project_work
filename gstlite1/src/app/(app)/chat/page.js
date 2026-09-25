@@ -4,11 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Topbar from "@/components/Topbar";
 import { chatSeed, chatSuggestions } from "@/lib/mock-data";
 import { chat as chatApi } from "@/lib/api";
-import { Send, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
+import { Send, Sparkles, ShieldCheck, BookOpen, Trash2 } from "lucide-react";
 
 const CANNED_REPLIES = {
-  default:
-    "Based on your filing data, this comes from the compliance engine's rule check against GSTR-2B reconciliation. I've grounded this answer in Rule 36(4) of the CGST Rules — want me to walk through the fix step by step?",
   "Why is INV-2026-0729 flagged?":
     "INV-2026-0729 from Malabar Dyes Co. is flagged because the vendor GSTIN on the invoice doesn't match what's in your auto-drafted GSTR-2B for this period. That mismatch means the input tax credit on this invoice could be disallowed under Rule 36(4). I'd suggest asking the vendor to confirm their GSTIN and re-check their GSTR-1 filing.",
   "Explain the IRN requirement in simple terms":
@@ -26,8 +24,35 @@ export default function ChatPage() {
   const scrollRef = useRef(null);
 
   useEffect(() => {
+    let ignore = false;
+    async function loadHistory() {
+      try {
+        const history = await chatApi.history();
+        if (!ignore && history && history.length > 0) {
+          setMessages(history.map((m) => ({ role: m.role, content: m.content })));
+        }
+      } catch (err) {
+        console.warn("Could not load chat history:", err);
+      }
+    }
+    loadHistory();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);
+
+  async function handleClear() {
+    try {
+      await chatApi.clear();
+    } catch (err) {
+      console.warn("Could not clear history on server:", err);
+    }
+    setMessages(chatSeed);
+  }
 
   async function send(text) {
     const content = text ?? input;
@@ -38,14 +63,13 @@ export default function ChatPage() {
     setThinking(true);
 
     try {
-      // Real backend call — grounded in whatever invoice/business context
-      // the server attaches. No invoice_id scoping from this page yet, so
-      // it answers from general business context.
       const reply = await chatApi.ask(content);
       setMessages((m) => [...m, { role: "assistant", content: reply.content }]);
     } catch (err) {
       console.warn("Could not reach the AI advisor endpoint, using local fallback:", err);
-      const fallbackReply = CANNED_REPLIES[content] || CANNED_REPLIES.default;
+      const fallbackReply =
+        CANNED_REPLIES[content] ||
+        "I'm temporarily having trouble reaching the AI service. Please ensure the backend is running and try again.";
       setMessages((m) => [...m, { role: "assistant", content: fallbackReply }]);
     } finally {
       setThinking(false);
@@ -54,7 +78,21 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-screen">
-      <Topbar title="AI advisor" subtitle="Grounded in your filing data and current GST law" />
+      <Topbar
+        title="AI advisor"
+        subtitle="Grounded in your filing data and current GST law"
+        action={
+          <button
+            onClick={handleClear}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+            style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--ink-soft)" }}
+            title="Clear chat history"
+          >
+            <Trash2 size={13} />
+            <span className="hidden sm:inline">Clear chat</span>
+          </button>
+        }
+      />
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 md:px-8 py-6">
         <div className="max-w-2xl mx-auto flex flex-col gap-5">
@@ -72,7 +110,7 @@ export default function ChatPage() {
                 </span>
               )}
               <div
-                className="rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%]"
+                className="rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap"
                 style={{
                   background: m.role === "user" ? "var(--primary)" : "var(--surface)",
                   color: m.role === "user" ? "white" : "var(--ink)",

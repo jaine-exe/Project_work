@@ -20,7 +20,7 @@ const STATUS_TO_STAGE = {
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 30000;
 
-function makeLocalFile(file) {
+function makeLocalFile(file, docType = "purchase") {
   return {
     localId: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: file.name,
@@ -28,12 +28,14 @@ function makeLocalFile(file) {
     stage: "uploaded",
     invoiceId: null,
     backendStatus: null,
+    documentType: docType,
     error: null,
   };
 }
 
 export default function UploadPage() {
   const [files, setFiles] = useState([]);
+  const [docType, setDocType] = useState("purchase"); // "purchase" | "sales"
   const [isDragging, setDragging] = useState(false);
   const inputRef = useRef(null);
 
@@ -70,9 +72,9 @@ export default function UploadPage() {
   );
 
   const uploadOne = useCallback(
-    async (localId, file) => {
+    async (localId, file, type) => {
       try {
-        const invoice = await invoicesApi.upload(file);
+        const invoice = await invoicesApi.upload(file, type);
         patchFile(localId, {
           invoiceId: invoice.id,
           stage: STATUS_TO_STAGE[invoice.status] || "uploaded",
@@ -91,11 +93,11 @@ export default function UploadPage() {
   const addFiles = useCallback(
     (fileList) => {
       const incoming = Array.from(fileList);
-      const newFiles = incoming.map(makeLocalFile);
+      const newFiles = incoming.map((f) => makeLocalFile(f, docType));
       setFiles((prev) => [...newFiles, ...prev]);
-      newFiles.forEach((lf, i) => uploadOne(lf.localId, incoming[i]));
+      newFiles.forEach((lf, i) => uploadOne(lf.localId, incoming[i], docType));
     },
-    [uploadOne]
+    [docType, uploadOne]
   );
 
   function handleDrop(e) {
@@ -115,6 +117,42 @@ export default function UploadPage() {
       <Topbar title="Upload invoices" subtitle="PDF, image, or e-invoice XML — up to 20 files at once" />
 
       <div className="px-5 md:px-8 py-6 flex flex-col gap-6 max-w-5xl">
+        {/* Document Classification Toggle */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl card">
+          <div>
+            <h3 className="font-display font-bold text-sm" style={{ color: "var(--ink)" }}>
+              Invoice Classification
+            </h3>
+            <p className="text-xs mt-0.5" style={{ color: "var(--ink-soft)" }}>
+              {docType === "purchase"
+                ? "Purchase invoices (Inward supplies) — Used to verify vendor GSTINs and claim Input Tax Credit (ITC)."
+                : "Sales invoices (Outward supplies) — Used to compute Output Tax Liability for GSTR-1 & GSTR-3B."}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 p-1 rounded-lg shrink-0" style={{ background: "var(--surface-sunken)" }}>
+            <button
+              type="button"
+              onClick={() => setDocType("purchase")}
+              className={`px-4 py-2 rounded-md text-xs font-semibold transition-all ${
+                docType === "purchase" ? "shadow-sm text-white" : "text-gray-600 hover:text-gray-900"
+              }`}
+              style={{ background: docType === "purchase" ? "var(--primary)" : "transparent" }}
+            >
+              Purchase (Inward / ITC)
+            </button>
+            <button
+              type="button"
+              onClick={() => setDocType("sales")}
+              className={`px-4 py-2 rounded-md text-xs font-semibold transition-all ${
+                docType === "sales" ? "shadow-sm text-white" : "text-gray-600 hover:text-gray-900"
+              }`}
+              style={{ background: docType === "sales" ? "var(--primary)" : "transparent" }}
+            >
+              Sales (Outward / Output Tax)
+            </button>
+          </div>
+        </div>
+
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -145,15 +183,17 @@ export default function UploadPage() {
           >
             <UploadCloud size={24} style={{ color: "var(--primary)" }} />
           </div>
-          <p className="font-display font-bold text-lg">Drop invoices here, or browse</p>
+          <p className="font-display font-bold text-lg">
+            Drop {docType === "sales" ? "sales" : "purchase"} invoices here, or browse
+          </p>
           <p className="text-sm mt-1.5" style={{ color: "var(--ink-soft)" }}>
-            Our parsing pipeline extracts vendor, GSTIN, HSN, amount, and tax rate automatically.
+            Our pipeline extracts vendor, GSTIN, HSN, amount, and tax rate automatically.
           </p>
           <span
             className="mt-5 inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold text-white"
             style={{ background: "var(--primary)" }}
           >
-            Choose files
+            Choose {docType === "sales" ? "Sales" : "Purchase"} files
           </span>
         </div>
 
@@ -189,8 +229,15 @@ export default function UploadPage() {
                       <p className="text-sm font-medium truncate" style={{ color: "var(--ink)" }}>
                         {f.name}
                       </p>
-                      <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
-                        {(f.size / 1024).toFixed(0)} KB
+                      <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--ink-faint)" }}>
+                        <span>{(f.size / 1024).toFixed(0)} KB</span>
+                        <span>•</span>
+                        <span
+                          className="font-semibold uppercase tracking-wider text-[10px]"
+                          style={{ color: f.documentType === "sales" ? "var(--warning)" : "var(--primary)" }}
+                        >
+                          {f.documentType === "sales" ? "Sales (Outward)" : "Purchase (Inward)"}
+                        </span>
                       </p>
                     </div>
                   </div>

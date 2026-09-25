@@ -17,3 +17,7 @@ Pillow==10.4.0
 
 # Optional: real AI advisor (falls back to rule-based canned answers if no key is set)
 openai==1.51.0
+
+# PDF Generation
+reportlab>=4.0.0
+
