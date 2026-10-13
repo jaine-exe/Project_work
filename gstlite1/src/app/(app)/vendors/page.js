@@ -34,6 +34,7 @@ export default function VendorsPage() {
   const [noticePreview, setNoticePreview] = useState(null);
   const [loadingNotice, setLoadingNotice] = useState(false);
   const [copiedText, setCopiedText] = useState("");
+  const [noticePhone, setNoticePhone] = useState("6282374326");
 
   useEffect(() => {
     loadData();
@@ -424,13 +425,32 @@ export default function VendorsPage() {
               </div>
             ) : noticePreview ? (
               <div className="p-6 flex flex-col gap-5 overflow-y-auto max-h-[80vh]">
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs">
-                  <p className="font-semibold text-emerald-950">
-                    Recipient: {activeNotice.vendor_name} ({activeNotice.vendor_gstin || "No GSTIN"})
-                  </p>
-                  <p className="text-emerald-800 mt-0.5">
-                    Invoice: {activeNotice.invoice_number} · Amount: ₹{activeNotice.amount?.toLocaleString("en-IN")} · Blocked ITC: ₹{activeNotice.tax_amount?.toLocaleString("en-IN")}
-                  </p>
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs flex flex-col gap-2">
+                  <div>
+                    <p className="font-semibold text-emerald-950">
+                      Recipient: {activeNotice.vendor_name} ({activeNotice.vendor_gstin || "No GSTIN"})
+                    </p>
+                    <p className="text-emerald-800 mt-0.5">
+                      Invoice: {activeNotice.invoice_number} · Amount: ₹{activeNotice.amount?.toLocaleString("en-IN")} · Blocked ITC: ₹{activeNotice.tax_amount?.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-emerald-200/70 flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-[11px] font-semibold text-emerald-900">
+                      Vendor WhatsApp Number:
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded border border-emerald-300">
+                        +91
+                      </span>
+                      <input
+                        type="tel"
+                        value={noticePhone}
+                        onChange={(e) => setNoticePhone(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="text-xs font-semibold px-2.5 py-1 bg-white border border-emerald-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-600 w-36"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* WhatsApp Message Preview */}
@@ -451,14 +471,21 @@ export default function VendorsPage() {
                   <pre className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 whitespace-pre-wrap font-sans">
                     {noticePreview.whatsapp_text}
                   </pre>
-                  <a
-                    href={noticePreview.whatsapp_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm cursor-pointer"
-                  >
-                    Open in WhatsApp Web <ExternalLink size={12} />
-                  </a>
+                  {(() => {
+                    const clean = (noticePhone || "").replace(/\D/g, "");
+                    const targetPhone = clean.length === 10 ? "91" + clean : clean;
+                    const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(noticePreview.whatsapp_text || "")}`;
+                    return (
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm cursor-pointer"
+                      >
+                        Open in WhatsApp Web <ExternalLink size={12} />
+                      </a>
+                    );
+                  })()}
                 </div>
 
                 {/* Email Body Preview */}
