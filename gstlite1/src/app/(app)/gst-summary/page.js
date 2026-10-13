@@ -5,8 +5,9 @@ import Topbar from "@/components/Topbar";
 import PeriodSelector, { formatPeriodName } from "@/components/PeriodSelector";
 import StatusPill from "@/components/StatusPill";
 import InvoiceReviewModal from "@/components/InvoiceReviewModal";
-import { gst as gstApi, invoices as invoicesApi, auth as authApi } from "@/lib/api";
-import { Download, FileCheck2, ChevronDown, Loader2, Edit3, Eye } from "lucide-react";
+import ReturnFilingModal from "@/components/ReturnFilingModal";
+import { gst as gstApi, invoices as invoicesApi, auth as authApi, returns as returnsApi } from "@/lib/api";
+import { Download, FileCheck2, ChevronDown, Loader2, Edit3, Eye, ShieldCheck, Lock, Globe } from "lucide-react";
 
 export default function GstSummaryPage() {
   const [periods, setPeriods] = useState(["2026-08", "2026-07", "2026-06"]);
@@ -22,6 +23,8 @@ export default function GstSummaryPage() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportError, setExportError] = useState("");
   const [reviewInvoice, setReviewInvoice] = useState(null);
+  const [showFilingModal, setShowFilingModal] = useState(false);
+  const [filingStatus, setFilingStatus] = useState(null);
 
   useEffect(() => {
     gstApi.periods()
@@ -36,6 +39,22 @@ export default function GstSummaryPage() {
       .catch(() => {});
   }, []);
 
+  async function refreshSummaryAndStatus() {
+    if (!selectedPeriod) return;
+    try {
+      const [summaryData, invoicesData, statusData] = await Promise.all([
+        gstApi.summary(selectedPeriod),
+        invoicesApi.list(selectedPeriod),
+        returnsApi.status(selectedPeriod),
+      ]);
+      setSummary(summaryData);
+      setInvoiceList(invoicesData.invoices);
+      setFilingStatus(statusData);
+    } catch (err) {
+      console.warn("Could not refresh data:", err);
+    }
+  }
+
   useEffect(() => {
     if (!selectedPeriod) return;
     let cancelled = false;
@@ -46,12 +65,14 @@ export default function GstSummaryPage() {
       gstApi.summary(selectedPeriod),
       invoicesApi.list(selectedPeriod),
       authApi.me(),
+      returnsApi.status(selectedPeriod).catch(() => null),
     ])
-      .then(([summaryData, invoicesData, me]) => {
+      .then(([summaryData, invoicesData, me, statusData]) => {
         if (cancelled) return;
         setSummary(summaryData);
         setInvoiceList(invoicesData.invoices);
         setBusiness(me.business);
+        if (statusData) setFilingStatus(statusData);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Couldn't load GST summary");
@@ -65,17 +86,8 @@ export default function GstSummaryPage() {
     };
   }, [selectedPeriod]);
 
-  async function handleGenerateReturn() {
-    setGenerating(true);
-    setGenerateError("");
-    try {
-      await gstApi.generateReturn(selectedPeriod, "GSTR-3B");
-      alert("Return generated successfully. File it from the returns list once you're ready.");
-    } catch (err) {
-      setGenerateError(err.message || "Couldn't generate the return");
-    } finally {
-      setGenerating(false);
-    }
+  function handleGenerateReturn() {
+    setShowFilingModal(true);
   }
 
   async function handleExportPdf() {
@@ -112,11 +124,34 @@ export default function GstSummaryPage() {
         title="GST summary"
         subtitle={`${formatPeriodName(selectedPeriod)} · ${business?.scheme || "Regular"} scheme · ${business?.state || ""}`}
         action={
-          <PeriodSelector
-            periods={periods}
-            selectedPeriod={selectedPeriod}
-            onChange={setSelectedPeriod}
-          />
+          <div className="flex items-center gap-2.5">
+            <PeriodSelector
+              periods={periods}
+              selectedPeriod={selectedPeriod}
+              onChange={setSelectedPeriod}
+            />
+            <button
+              onClick={() => setShowFilingModal(true)}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm hover:opacity-95 transition-all cursor-pointer"
+              style={{
+                background: filingStatus?.is_filed
+                  ? "linear-gradient(135deg, #059669 0%, #047857 100%)"
+                  : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+              }}
+            >
+              {filingStatus?.is_filed ? (
+                <>
+                  <ShieldCheck size={14} className="text-emerald-200" />
+                  <span>Filed · {filingStatus.arn ? `ARN: ${filingStatus.arn.slice(0, 10)}…` : "Verified"}</span>
+                </>
+              ) : (
+                <>
+                  <Globe size={14} />
+                  <span>GSTN Filing Hub</span>
+                </>
+              )}
+            </button>
+          </div>
         }
       />
 
@@ -153,6 +188,40 @@ export default function GstSummaryPage() {
                 </div>
               ))}
             </div>
+
+            {/* Return Filed Audit Trail Banner */}
+            {filingStatus?.is_filed && (
+              <div className="card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-emerald-50/70 border border-emerald-200">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                    <ShieldCheck size={22} />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-display font-bold text-sm sm:text-base text-emerald-950">
+                        GST Return Filed for {formatPeriodName(selectedPeriod)}
+                      </p>
+                      <span className="font-mono-data text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-200 text-emerald-900 border border-emerald-300">
+                        ARN: {filingStatus.arn}
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-700 mt-1">
+                      Mode: {filingStatus.filing_mode === "direct_portal_otp" ? "Direct GSTN Portal Push" : "Offline Utility JSON"} · Filed on{" "}
+                      {filingStatus.filed_at ? new Date(filingStatus.filed_at).toLocaleString("en-IN") : "Recorded"} ·{" "}
+                      <span className="font-semibold text-red-700">{filingStatus.locked_invoices} invoices locked against modification</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setShowFilingModal(true)}
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-sm"
+                  >
+                    View Receipt & Audit Trail
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Tax rate breakdown */}
@@ -197,11 +266,15 @@ export default function GstSummaryPage() {
                   <button
                     onClick={handleGenerateReturn}
                     disabled={generating}
-                    className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: "var(--primary)" }}
+                    className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 cursor-pointer shadow-sm hover:opacity-95 transition-opacity"
+                    style={{
+                      background: filingStatus?.is_filed
+                        ? "linear-gradient(135deg, #059669 0%, #047857 100%)"
+                        : "var(--primary)",
+                    }}
                   >
-                    {generating ? <Loader2 size={16} className="animate-spin" /> : <FileCheck2 size={16} />}
-                    {generating ? "Generating…" : "Generate GSTR-3B"}
+                    {filingStatus?.is_filed ? <ShieldCheck size={16} /> : <FileCheck2 size={16} />}
+                    {filingStatus?.is_filed ? "Filing Hub & Exports (Filed)" : "GSTN Filing & JSON Exports"}
                   </button>
                   {exportError && (
                     <p className="text-xs mb-1" style={{ color: "var(--danger)" }}>
@@ -272,6 +345,11 @@ export default function GstSummaryPage() {
                                       {inv.display_id}
                                     </span>
                                   )}
+                                  {inv.is_locked && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-semibold bg-red-100 text-red-700" title="Locked by Return Filing">
+                                      <Lock size={10} /> Locked
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-3 py-3">
@@ -301,10 +379,13 @@ export default function GstSummaryPage() {
                                 <button
                                   onClick={() => setReviewInvoice(inv)}
                                   className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded border hover:bg-slate-100 transition-colors"
-                                  style={{ borderColor: "var(--border)", color: "var(--primary)" }}
+                                  style={{
+                                    borderColor: "var(--border)",
+                                    color: inv.is_locked ? "var(--danger)" : "var(--primary)",
+                                  }}
                                 >
-                                  <Edit3 size={12} />
-                                  Review & Edit
+                                  {inv.is_locked ? <Lock size={11} /> : <Edit3 size={12} />}
+                                  {inv.is_locked ? "View (Locked)" : "Review & Edit"}
                                 </button>
                               </td>
                             </tr>
@@ -425,6 +506,15 @@ export default function GstSummaryPage() {
         isOpen={Boolean(reviewInvoice)}
         onClose={() => setReviewInvoice(null)}
         onSaveSuccess={handleInvoiceUpdated}
+      />
+
+      <ReturnFilingModal
+        isOpen={showFilingModal}
+        onClose={() => setShowFilingModal(false)}
+        period={selectedPeriod}
+        business={business}
+        summary={summary}
+        onFilingUpdated={refreshSummaryAndStatus}
       />
     </div>
   );

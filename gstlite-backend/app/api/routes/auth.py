@@ -6,7 +6,16 @@ from app.api.deps import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.database import get_db
 from app.db.models import Business, User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import (
+    BusinessOut,
+    DemoAccountOut,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    SwitchBusinessRequest,
+    TokenResponse,
+    UserOut,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -64,3 +73,79 @@ def login_json(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/demo-accounts", response_model=list[DemoAccountOut])
+def get_demo_accounts():
+    """Returns curated demo profiles with credentials for instant testing."""
+    accounts = [
+        DemoAccountOut(
+            email="jaine@test.com",
+            password="password123",
+            name="Jaine Thomas",
+            business_name="Ashoka Textiles Pvt. Ltd.",
+            gstin="32AACCA1234F1Z5",
+            state="Kerala",
+            role_description="Textile Manufacturing & Retail (Regular Scheme)",
+        ),
+        DemoAccountOut(
+            email="alan@example.com",
+            password="password123",
+            name="Alan Test",
+            business_name="Alan Enterprises Pvt Ltd",
+            gstin="32AAECS1234F1Z5",
+            state="Kerala",
+            role_description="Engineering Hardware & Distribution",
+        ),
+    ]
+    return accounts
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Resets user password in SQLite database."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No registered account found with this email address")
+
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Password updated successfully. You can now log in with your new password."}
+
+
+@router.get("/businesses", response_model=list[BusinessOut])
+def list_available_businesses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lists businesses available in the system for multi-tenant switching."""
+    businesses = db.query(Business).all()
+    return businesses
+
+
+@router.post("/switch-business")
+def switch_active_business(
+    payload: SwitchBusinessRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Switches the user's active business context to another registered entity."""
+    target = db.query(Business).filter(Business.id == payload.business_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    # Re-assign or link target business to current user
+    target.owner_id = current_user.id
+    db.commit()
+    db.refresh(target)
+
+    return {
+        "message": f"Switched active business to {target.name}",
+        "business": {
+            "id": target.id,
+            "name": target.name,
+            "gstin": target.gstin,
+            "state": target.state,
+            "scheme": target.scheme,
+        },
+    }

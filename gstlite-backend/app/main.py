@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Added returns router to the imports
-from app.api.routes import auth, chat, compliance, gst, invoices, returns
+from app.api.routes import auth, chat, compliance, gst, invoices, returns, invoicing, vendors, integrations, notices
 from app.core.config import settings
 from app.db import models  # noqa: F401 — ensures models are registered before create_all
 from app.db.database import Base, engine
@@ -33,7 +33,11 @@ app.include_router(invoices.router)
 app.include_router(compliance.router)
 app.include_router(gst.router)
 app.include_router(chat.router)
-app.include_router(returns.router)  # Registered Phase 2 return router
+app.include_router(returns.router)
+app.include_router(invoicing.router)
+app.include_router(vendors.router)
+app.include_router(integrations.router)
+app.include_router(notices.router)
 
 
 @app.get("/api/health", tags=["health"])

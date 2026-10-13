@@ -171,6 +171,135 @@ def check_buyer_taxpayer_match(
     return findings
 
 
+BLOCKED_ITC_KEYWORDS = [
+    ("motor vehicle", "Motor vehicles for transportation of persons with seating capacity <= 13"),
+    ("car rental", "Car rental / leasing of passenger motor vehicles"),
+    ("catering", "Food and beverages / outdoor catering services"),
+    ("restaurant", "Food and beverages supplied at restaurants"),
+    ("hotel food", "Food and beverage expenses"),
+    ("health insurance", "Health insurance or life insurance not mandated by statutory law"),
+    ("gym", "Club, fitness centre or gym membership fees"),
+    ("club membership", "Club or social association membership fees"),
+    ("cosmetic", "Cosmetic and plastic surgery expenses"),
+    ("gift", "Goods given as gifts or free samples exceeding permissible thresholds"),
+    ("personal", "Goods or services used for personal consumption"),
+    ("written off", "Goods lost, stolen, destroyed, written off or disposed of by way of gift"),
+]
+
+
+def check_section_17_5_blocked_itc(parsed_data: Dict[str, Any]) -> List[Finding]:
+    """Detects Section 17(5) blocked / ineligible ITC goods and services."""
+    findings = []
+    text_corpus = " ".join([
+        str(parsed_data.get("vendor_name") or ""),
+        str(parsed_data.get("description") or ""),
+        str(parsed_data.get("original_filename") or ""),
+        str(parsed_data.get("notes") or ""),
+        str(parsed_data.get("hsn_code") or ""),
+    ]).lower()
+
+    for keyword, reason in BLOCKED_ITC_KEYWORDS:
+        if keyword in text_corpus:
+            findings.append(
+                Finding(
+                    title="Section 17(5) Blocked / Ineligible ITC",
+                    severity="high",
+                    description=(
+                        f"Input Tax Credit appears blocked under CGST Section 17(5): {reason}. "
+                        "Claiming this ITC risks audit scrutiny, mandatory reversal, and 18% p.a. interest."
+                    ),
+                    suggestion="Route to Table 4(B)(1) Ineligible ITC in GSTR-3B rather than claiming in Table 4(A).",
+                    rule_reference="CGST Section 17(5)",
+                )
+            )
+            break
+    return findings
+
+
+def check_place_of_supply(
+    parsed_data: Dict[str, Any], business: Optional[Any] = None
+) -> List[Finding]:
+    """Validates Place of Supply (PoS) and tax type routing (CGST+SGST vs IGST)."""
+    findings = []
+    vendor_gstin = str(parsed_data.get("vendor_gstin") or "").strip().upper()
+    taxpayer_gstin = getattr(business, "gstin", "") or str(parsed_data.get("buyer_gstin") or "").strip().upper()
+
+    if len(vendor_gstin) >= 2 and len(taxpayer_gstin) >= 2:
+        vendor_state = vendor_gstin[:2]
+        buyer_state = taxpayer_gstin[:2]
+
+        igst = float(parsed_data.get("igst_amount") or parsed_data.get("igst") or 0.0)
+        cgst = float(parsed_data.get("cgst_amount") or parsed_data.get("cgst") or 0.0)
+        sgst = float(parsed_data.get("sgst_amount") or parsed_data.get("sgst") or 0.0)
+
+        # Same state: Intra-state -> Expect CGST + SGST, no IGST
+        if vendor_state == buyer_state:
+            if igst > 10.0 and (cgst == 0.0 or sgst == 0.0):
+                findings.append(
+                    Finding(
+                        title="Place of Supply Error: Incorrect IGST on Intra-State Supply",
+                        severity="high",
+                        description=(
+                            f"Supplier GSTIN starts with '{vendor_state}' and Buyer GSTIN starts with '{buyer_state}' (Intra-state), "
+                            f"but IGST of ₹{igst:,.2f} was charged instead of CGST + SGST."
+                        ),
+                        suggestion="Request the supplier to cancel this invoice or issue a credit note and re-issue with CGST and SGST.",
+                        rule_reference="CGST Section 9 & IGST Section 7",
+                    )
+                )
+        else:
+            # Different state: Inter-state -> Expect IGST, no CGST + SGST
+            if (cgst > 10.0 or sgst > 10.0) and igst == 0.0:
+                findings.append(
+                    Finding(
+                        title="Place of Supply Error: Incorrect CGST/SGST on Inter-State Supply",
+                        severity="high",
+                        description=(
+                            f"Supplier GSTIN starts with '{vendor_state}' (Inter-state supply to '{buyer_state}'), "
+                            f"but local CGST/SGST was charged instead of IGST."
+                        ),
+                        suggestion="CGST/SGST of another state cannot be claimed as ITC. Request the supplier to amend the bill with IGST.",
+                        rule_reference="IGST Section 8 & CGST Section 12",
+                    )
+                )
+    return findings
+
+
+def check_180_day_payment(parsed_data: Dict[str, Any]) -> List[Finding]:
+    """Detects vendor invoices unpaid beyond 180 days requiring mandatory ITC reversal."""
+    findings = []
+    inv_date_str = parsed_data.get("invoice_date")
+    is_paid = parsed_data.get("is_paid", False)
+
+    if inv_date_str and not is_paid:
+        try:
+            from datetime import date, datetime
+            if "-" in inv_date_str:
+                parts = inv_date_str.split("-")
+                if len(parts[0]) == 4:
+                    dt = datetime.strptime(inv_date_str, "%Y-%m-%d").date()
+                else:
+                    dt = datetime.strptime(inv_date_str, "%d-%m-%Y").date()
+                days_old = (date.today() - dt).days
+                if days_old > 180:
+                    findings.append(
+                        Finding(
+                            title="Section 16(2) 180-Day Payment Overdue — Mandatory ITC Reversal",
+                            severity="high",
+                            description=(
+                                f"Invoice is {days_old} days old and remains unpaid. Under the second proviso to "
+                                "Section 16(2), if payment is not made to the supplier within 180 days, the ITC must be "
+                                "reversed with 18% annual interest under Rule 37."
+                            ),
+                            suggestion="Mark invoice as paid if settled, or record ITC reversal in Table 4(B)(2) of GSTR-3B.",
+                            rule_reference="CGST Section 16(2) Proviso & Rule 37",
+                        )
+                    )
+        except Exception:
+            pass
+    return findings
+
+
 def calculate_compliance_score(findings: List[Any]) -> int:
     """Calculates compliance score (base 100) from list of findings."""
     score = 100
@@ -230,6 +359,9 @@ def run_all_checks(
     findings.extend(check_tax_calculation(parsed_data))
     findings.extend(check_2b_reconciliation(parsed_data, known_2b_gstins))
     findings.extend(check_buyer_taxpayer_match(parsed_data, business=business))
+    findings.extend(check_section_17_5_blocked_itc(parsed_data))
+    findings.extend(check_place_of_supply(parsed_data, business=business))
+    findings.extend(check_180_day_payment(parsed_data))
 
     score = calculate_compliance_score(findings)
     risk = risk_from_findings(findings)

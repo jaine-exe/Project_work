@@ -68,6 +68,16 @@ export const auth = {
   register: (payload) =>
     request("/api/auth/register", { method: "POST", body: payload, auth: false }),
   me: () => request("/api/auth/me"),
+  demoAccounts: () => request("/api/auth/demo-accounts", { auth: false }),
+  resetPassword: (email, new_password) =>
+    request("/api/auth/reset-password", {
+      method: "POST",
+      body: { email, new_password },
+      auth: false,
+    }),
+  businesses: () => request("/api/auth/businesses"),
+  switchBusiness: (business_id) =>
+    request("/api/auth/switch-business", { method: "POST", body: { business_id } }),
 };
 
 // ---- Invoices ----
@@ -144,6 +154,56 @@ export const gst = {
   },
 };
 
+// ---- Official Returns & GSTN Filing ----
+export const returns = {
+  gstr3b: (period = "2026-09") => request(`/api/returns/gstr3b?period=${period}`),
+  gstr1: (period = "2026-09") => request(`/api/returns/gstr1?period=${period}`),
+  status: (period = "2026-09") => request(`/api/returns/status?period=${period}`),
+  file: (payload) => request("/api/returns/file", { method: "POST", body: payload }),
+  unlock: (period) => request("/api/returns/unlock", { method: "POST", body: { period } }),
+
+  downloadGstr3bJson: async (period = "2026-09", gstin = "GSTIN") => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/api/returns/gstr3b/download-json?period=${period}`, { headers });
+    if (!res.ok) throw new Error("Failed to download GSTR-3B offline JSON");
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `GSTR3B_${gstin}_${period.replace("-", "")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadGstr1Json: async (period = "2026-09", gstin = "GSTIN") => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/api/returns/gstr1/download-json?period=${period}`, { headers });
+    if (!res.ok) throw new Error("Failed to download GSTR-1 offline JSON");
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `GSTR1_${gstin}_${period.replace("-", "")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  portalAuthOtp: (gstin) => request("/api/returns/portal/auth-otp", { method: "POST", body: { gstin } }),
+  portalVerifyOtp: (gstin, otp) => request("/api/returns/portal/verify-otp", { method: "POST", body: { gstin, otp } }),
+  portalPushReturn: (payload) => request("/api/returns/portal/push-return", { method: "POST", body: payload }),
+  portalSync2b: (period) => request(`/api/returns/portal/sync-2b?period=${period}`, { method: "POST" }),
+};
+
 // ---- Chat ----
 export const chat = {
   history: () => request("/api/chat/history"),
@@ -152,4 +212,72 @@ export const chat = {
   clear: () => request("/api/chat/history", { method: "DELETE" }),
 };
 
+// ---- Sales Invoicing, E-Invoicing & E-Way Bills ----
+export const invoicing = {
+  list: () => request("/api/invoicing/invoices"),
+  create: (payload) => request("/api/invoicing/invoices", { method: "POST", body: payload }),
+  generateEInvoice: (id) => request(`/api/invoicing/invoices/${id}/e-invoice`, { method: "POST" }),
+  generateEWayBill: (id, payload) => request(`/api/invoicing/invoices/${id}/e-way-bill`, { method: "POST", body: payload }),
+  issueCreditDebitNote: (id, payload) => request(`/api/invoicing/invoices/${id}/credit-debit-note`, { method: "POST", body: payload }),
+  updateStatus: (id, newStatus) => request(`/api/invoicing/invoices/${id}/status?new_status=${newStatus}`, { method: "PATCH" }),
+};
+
+// ---- Vendor Reconciliation & Communication ----
+export const vendors = {
+  scorecard: () => request("/api/vendors/scorecard"),
+  missingInvoices: () => request("/api/vendors/missing-invoices"),
+  noticePreview: (payload) => request("/api/vendors/notice-preview", { method: "POST", body: payload }),
+};
+
+// ---- ERP, Tally & Bank Integrations ----
+export const integrations = {
+  downloadTallyXml: async (period = "", gstin = "GSTIN") => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/api/integrations/tally/export-xml?period=${period}`, { headers });
+    if (!res.ok) throw new Error("Failed to export Tally XML vouchers");
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Tally_Vouchers_${gstin}_${period || "All"}.xml`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadExcelCsv: async (gstin = "GSTIN") => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/api/integrations/excel/export`, { headers });
+    if (!res.ok) throw new Error("Failed to export Excel CSV master ledger");
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `GST_Master_Ledger_${gstin}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  bulkZipUpload: (formData) => request("/api/integrations/bulk-zip", { method: "POST", body: formData, isForm: true }),
+  reconcileBankStatement: (formData) => request("/api/integrations/bank-reconcile", { method: "POST", body: formData, isForm: true }),
+};
+
+// ---- Tax Department Notice Desk & Cash Flow Forecast ----
+export const notices = {
+  list: () => request("/api/notices/"),
+  create: (payload) => request("/api/notices/", { method: "POST", body: payload }),
+  draftReply: (id, payload = {}) => request(`/api/notices/${id}/draft-reply`, { method: "POST", body: payload }),
+  forecast: (period = "") => request(`/api/notices/forecast?period=${period}`),
+};
+
 export { API_BASE };
+

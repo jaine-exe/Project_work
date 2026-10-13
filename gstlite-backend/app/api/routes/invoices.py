@@ -190,6 +190,12 @@ def update_and_revalidate_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
+    if getattr(invoice, "is_locked", False):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invoice '{invoice.invoice_number or invoice.display_id}' belongs to a filed return period and is locked against modifications."
+        )
+
     for field, value in update_data.model_dump(exclude_unset=True).items():
         setattr(invoice, field, value)
 

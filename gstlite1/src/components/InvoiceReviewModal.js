@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, CheckCircle2, AlertTriangle, FileText, Loader2, Save, ExternalLink } from "lucide-react";
+import { X, CheckCircle2, AlertTriangle, FileText, Loader2, Save, ExternalLink, Lock } from "lucide-react";
 import { invoices as invoicesApi } from "@/lib/api";
 import StatusPill from "@/components/StatusPill";
 
@@ -201,6 +201,21 @@ export default function InvoiceReviewModal({ invoice, isOpen, onClose, onSaveSuc
           {/* Right Column: Editable Invoice Fields Form */}
           <form onSubmit={handleSave} className="p-6 flex flex-col justify-between overflow-y-auto">
             <div className="flex flex-col gap-5">
+              {/* Return Filing Locked Banner */}
+              {invoice.is_locked && (
+                <div className="rounded-xl p-3.5 flex items-start gap-3 bg-red-50 border border-red-200 text-red-900">
+                  <Lock size={18} className="text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-red-800">
+                      Locked Period Record (Return Filed)
+                    </p>
+                    <p className="text-[11px] text-red-700 mt-0.5">
+                      This invoice belongs to a filed GST return period. It cannot be edited or deleted to preserve audit integrity. Unlock the period in GST Summary to allow corrections.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Compliance Alerts banner if flagged */}
               {invoice.issues?.length > 0 && (
                 <div className="rounded-xl p-3.5 flex flex-col gap-2 bg-amber-50 border border-amber-200">
@@ -423,12 +438,24 @@ export default function InvoiceReviewModal({ invoice, isOpen, onClose, onSaveSuc
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-semibold text-white shadow-sm transition-opacity disabled:opacity-60 cursor-pointer"
-                style={{ background: "var(--primary)" }}
+                disabled={saving || invoice.is_locked}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-semibold text-white shadow-sm transition-opacity disabled:opacity-60 ${
+                  invoice.is_locked ? "bg-slate-400 cursor-not-allowed" : "cursor-pointer"
+                }`}
+                style={invoice.is_locked ? {} : { background: "var(--primary)" }}
               >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? "Saving & Re-validating…" : "Save & Re-validate"}
+                {saving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : invoice.is_locked ? (
+                  <Lock size={14} />
+                ) : (
+                  <Save size={14} />
+                )}
+                {saving
+                  ? "Saving & Re-validating…"
+                  : invoice.is_locked
+                  ? "Locked Against Edits"
+                  : "Save & Re-validate"}
               </button>
             </div>
           </form>

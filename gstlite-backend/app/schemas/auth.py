@@ -60,3 +60,29 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+
+class DemoAccountOut(BaseModel):
+    email: str
+    password: str
+    name: str
+    business_name: str
+    gstin: str
+    state: str
+    role_description: str
+
+
+class SwitchBusinessRequest(BaseModel):
+    business_id: str

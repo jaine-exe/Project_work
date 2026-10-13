@@ -119,6 +119,10 @@ class Invoice(Base):
     tax_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     hsn_code: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
+    paid_date: Mapped[str | None] = mapped_column(String, nullable=True)
+
     processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -178,6 +182,10 @@ class GstReturn(Base):
 
     payload_json: Mapped[str] = mapped_column(Text)  # full generated return, as JSON
     is_filed: Mapped[bool] = mapped_column(Boolean, default=False)
+    arn: Mapped[str | None] = mapped_column(String, nullable=True)
+    filed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    filing_mode: Mapped[str | None] = mapped_column(String, nullable=True)
+    acknowledgement_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -198,5 +206,75 @@ class Gstr2bEntry(Base):
     tax_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     tax_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     itc_available: Mapped[str] = mapped_column(String, default="Y")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class SalesInvoice(Base):
+    __tablename__ = "sales_invoices"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id"))
+
+    invoice_number: Mapped[str] = mapped_column(String, index=True)
+    invoice_type: Mapped[str] = mapped_column(String, default="B2B")  # "B2B", "B2C", "credit_note", "debit_note"
+    original_invoice_number: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    customer_name: Mapped[str] = mapped_column(String)
+    customer_gstin: Mapped[str | None] = mapped_column(String, nullable=True)
+    customer_address: Mapped[str | None] = mapped_column(String, nullable=True)
+    place_of_supply: Mapped[str] = mapped_column(String, default="")
+
+    invoice_date: Mapped[str] = mapped_column(String)  # YYYY-MM-DD
+    due_date: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    items_json: Mapped[str] = mapped_column(Text, default="[]")
+    taxable_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    cgst_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    sgst_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    igst_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    total_tax: Mapped[float] = mapped_column(Float, default=0.0)
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # E-Invoicing (IRN)
+    irn: Mapped[str | None] = mapped_column(String, nullable=True)
+    irn_ack_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    irn_ack_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    irn_signed_qr: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # E-Way Bill (EWB)
+    ewb_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    ewb_valid_until: Mapped[str | None] = mapped_column(String, nullable=True)
+    ewb_vehicle_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    ewb_transporter_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    ewb_distance_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    status: Mapped[str] = mapped_column(String, default="issued")  # "issued", "paid", "cancelled"
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class GstNotice(Base):
+    __tablename__ = "gst_notices"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id"))
+
+    notice_number: Mapped[str] = mapped_column(String, index=True)
+    form_type: Mapped[str] = mapped_column(String, default="ASMT-10")  # "ASMT-10", "DRC-01", "DRC-07", "SCN"
+    issue_date: Mapped[str] = mapped_column(String)  # YYYY-MM-DD
+    due_date: Mapped[str] = mapped_column(String)  # YYYY-MM-DD
+    financial_year: Mapped[str] = mapped_column(String, default="2025-26")
+    section_referred: Mapped[str] = mapped_column(String, default="Section 61")
+
+    tax_demand: Mapped[float] = mapped_column(Float, default=0.0)
+    penalty_demand: Mapped[float] = mapped_column(Float, default=0.0)
+    issuing_officer: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str] = mapped_column(Text)
+
+    status: Mapped[str] = mapped_column(String, default="pending")  # "pending", "drafted", "replied", "closed"
+    reply_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reply_submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
