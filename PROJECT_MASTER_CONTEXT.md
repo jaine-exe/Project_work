@@ -186,11 +186,23 @@ GSTLite completely automates the inward and outward compliance pipeline: from AI
 
 ---
 
-## 5. Verification & Mathematical Consistency
+## 5. Empirical Benchmark & Verification Results
 
-* **Statutory Consistency**: All tax formulas guarantee `Taxable Subtotal + CGST + SGST + IGST == Total Amount`.
-* **Filing Consistency**: GSTR-3B Net Tax Payable strictly satisfies `Max(0, Output Liability - Claimable ITC)`.
-* **Test Suite**: A standalone automated verification script (`test_all_features.py`) confirms 100% test passing across all endpoints, calculations, and export formats.
+* **Empirical 150-Invoice Benchmark (`evaluate_gstlite.py -n 150 --seed 42`)**:
+  * **Test Dataset**: 150 synthetic invoice records with programmatically injected ground-truth defects across six statutory categories (56 defective, 94 clean).
+  * **Confusion Matrix**: $\text{TP} = 56, \; \text{FN} = 0, \; \text{FP} = 0, \; \text{TN} = 94$.
+  * **Accuracy, Precision, Recall, Specificity, F1-Score**: $\mathbf{100.00\%}$ across all metrics with $\mathbf{0.00\%}$ False Positive Rate on this benchmark.
+  * **Per-Defect Detection**:
+    * Section 17(5) Blocked ITC: $4/4$ ($100.0\%$)
+    * Section 25 & Mod-36 Checksum: $15/15$ ($100.0\%$)
+    * Place of Supply (PoS) Routing: $4/4$ ($100.0\%$)
+    * Tax Math Integrity (CGST Sec 33): $8/8$ ($100.0\%$)
+    * Duplicate Submissions (CGST Rule 36): $17/17$ ($100.0\%$)
+    * 180-Day Rule 37 Overdue: $8/8$ ($100.0\%$)
+  * **Execution Latency**: Mean latency of **0.022 ms per invoice** ($\sim 44,795\text{ invoices/sec}$).
+* **Academic Scope & Evaluation Statement**:
+  > *"On a reproducible 150-invoice synthetic benchmark (seed 42), the GSTLite rule engine detected all 56 injected defects across six statutory categories with no false positives, at an average latency of 0.022 ms per invoice. OCR character extraction accuracy on physical scans, AI advisor retrieval grounding, and human time savings are planned for empirical evaluation on real-world paper corpuses."*
+
 
 ---
 

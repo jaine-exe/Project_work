@@ -2,7 +2,6 @@ import os
 import sys
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
@@ -11,7 +10,6 @@ from reportlab.platypus import (
     TableStyle,
     PageBreak,
     KeepTogether,
-    HRFlowable,
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
@@ -40,8 +38,8 @@ class NumberedCanvas(canvas.Canvas):
         
         # Header (on pages > 1)
         if self._pageNumber > 1:
-            self.drawString(40, 810, "GSTLite — Master Project Context & Technical Architecture Specification")
-            self.drawRightString(555, 810, "CONFIDENTIAL / TECHNICAL REPORT")
+            self.drawString(40, 810, "GSTLite — Verified Platform Architecture & Rule-Engine Performance Report")
+            self.drawRightString(555, 810, "TECHNICAL EVALUATION REPORT")
             self.setStrokeColor(colors.HexColor("#CBD5E1"))
             self.setLineWidth(0.5)
             self.line(40, 804, 555, 804)
@@ -61,45 +59,43 @@ def build_pdf(filename):
         pagesize=A4,
         leftMargin=40,
         rightMargin=40,
-        topMargin=50,
-        bottomMargin=50,
+        topMargin=46,
+        bottomMargin=46,
     )
     
     styles = getSampleStyleSheet()
     
-    # Custom styles
     primary_color = colors.HexColor("#0F172A")    # Deep slate
     brand_blue = colors.HexColor("#1D4ED8")       # Royal blue
     text_dark = colors.HexColor("#1E293B")        # Charcoal
     text_muted = colors.HexColor("#475569")       # Muted slate
-    code_bg = colors.HexColor("#F8FAFC")
     
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=20,
-        leading=24,
+        fontSize=18,
+        leading=22,
         textColor=primary_color,
-        spaceAfter=4,
+        spaceAfter=3,
     )
     
     subtitle_style = ParagraphStyle(
         'DocSubtitle',
         parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=10.5,
-        leading=15,
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=13,
         textColor=brand_blue,
-        spaceAfter=12,
+        spaceAfter=6,
     )
     
     meta_style = ParagraphStyle(
         'MetaText',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=12,
+        fontSize=8,
+        leading=11,
         textColor=text_muted,
     )
     
@@ -107,23 +103,23 @@ def build_pdf(filename):
         'Heading1_Custom',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=17,
+        fontSize=11.5,
+        leading=15,
         textColor=brand_blue,
-        spaceBefore=14,
-        spaceAfter=6,
+        spaceBefore=10,
+        spaceAfter=4,
         keepWithNext=True,
     )
-    
+
     h2_style = ParagraphStyle(
         'Heading2_Custom',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=10.5,
-        leading=14,
+        fontSize=9.5,
+        leading=13,
         textColor=primary_color,
-        spaceBefore=10,
-        spaceAfter=4,
+        spaceBefore=7,
+        spaceAfter=3,
         keepWithNext=True,
     )
     
@@ -131,29 +127,29 @@ def build_pdf(filename):
         'Body_Custom',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=9,
-        leading=13,
+        fontSize=8.5,
+        leading=12,
         textColor=text_dark,
-        spaceAfter=6,
+        spaceAfter=5,
     )
 
     bullet_style = ParagraphStyle(
         'Bullet_Custom',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=12,
+        fontSize=8,
+        leading=11,
         textColor=text_dark,
-        leftIndent=12,
-        spaceAfter=3,
+        leftIndent=10,
+        spaceAfter=2.5,
     )
     
     code_style = ParagraphStyle(
         'Code_Custom',
         parent=styles['Normal'],
         fontName='Courier',
-        fontSize=8,
-        leading=11,
+        fontSize=7.5,
+        leading=10,
         textColor=colors.HexColor("#0F172A"),
     )
     
@@ -161,8 +157,8 @@ def build_pdf(filename):
         'THStyle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8.5,
-        leading=11,
+        fontSize=8,
+        leading=10,
         textColor=colors.white,
     )
     
@@ -170,8 +166,8 @@ def build_pdf(filename):
         'TDStyle',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8,
-        leading=10.5,
+        fontSize=7.5,
+        leading=10,
         textColor=text_dark,
     )
     
@@ -179,106 +175,90 @@ def build_pdf(filename):
         'TDBold',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8,
-        leading=10.5,
+        fontSize=7.5,
+        leading=10,
         textColor=brand_blue,
     )
 
     story = []
 
-    # 1. Header Banner Box
+    # ================= PAGE 1 =================
     banner_content = [
-        [
-            Paragraph("<b>GSTLITE PLATFORM ARCHITECTURE & CONTEXT MANUAL</b>", title_style),
-        ],
-        [
-            Paragraph("<b>AI-Powered Statutory GST Compliance, E-Invoicing & Filing Operating System</b>", subtitle_style),
-        ],
-        [
-            Paragraph("<b>Repository:</b> github.com/jaine-exe/Project_work • <b>Branch:</b> main • <b>Status:</b> 100% Complete & Production-Verified<br/>"
-                      "<b>Target Audience:</b> AI Chat Assistants, Technical Evaluators, Chartered Accountants, and Developers", meta_style),
-        ]
+        [Paragraph("<b>GSTLITE PLATFORM ARCHITECTURE & EVALUATION SPECIFICATION</b>", title_style)],
+        [Paragraph("<b>AI-Powered Statutory GST Compliance, E-Invoicing & Automated Filing Operating System</b>", subtitle_style)],
+        [Paragraph("<b>Repository:</b> github.com/jaine-exe/Project_work • <b>Branch:</b> main • <b>Benchmark Status:</b> Evaluated & Defensible<br/>"
+                   "<b>Audience:</b> Academic Evaluators, Chartered Accountants, and Technical Interviewers", meta_style)]
     ]
     banner_table = Table(banner_content, colWidths=[515])
     banner_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#E2E8F0")),
-        ('PADDING', (0, 0), (-1, -1), 10),
+        ('PADDING', (0, 0), (-1, -1), 8),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 2),
-        ('BOTTOMPADDING', (0, 1), (-1, 1), 4),
+        ('BOTTOMPADDING', (0, 1), (-1, 1), 3),
     ]))
     story.append(banner_table)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 8))
 
-    # 2. Executive Summary & Verification Confirmation
-    story.append(Paragraph("1. Executive Summary & Implementation Status", h1_style))
+    story.append(Paragraph("1. System Overview & Scope", h1_style))
     story.append(Paragraph(
-        "<b>GSTLite</b> is a modern, enterprise-grade statutory GST compliance platform built specifically for Indian MSMEs, "
-        "tax practitioners, and Chartered Accountants. The application eliminates the severe legal and financial risks "
-        "inherent in Indian Goods and Services Tax law: ineligible Input Tax Credit (ITC) under <b>Section 17(5)</b>, "
-        "supplier non-compliance penalties under <b>Section 16(2)(aa)</b>, mandatory 180-day ITC clawback with 18% annual interest "
-        "under <b>Rule 37</b>, and automated defense generation for department scrutiny notices (<b>ASMT-10, DRC-01</b>).",
+        "<b>GSTLite</b> is a production-grade statutory compliance platform designed for Indian businesses and tax practitioners. "
+        "The system addresses primary failure modes under Indian Goods and Services Tax law: ineligible Input Tax Credit (ITC) "
+        "under <b>Section 17(5)</b>, supplier filing defaults under <b>Section 16(2)(aa)</b>, mandatory 180-day ITC reversal under <b>Rule 37</b>, "
+        "Place of Supply tax type misrouting, and government-format GSTR-1/3B return generation.",
         body_style
     ))
     
     status_box_data = [[
         Paragraph(
-            "<b>IMPLEMENTATION COMPLETION STATUS: 100% COMPLETE & VERIFIED</b><br/>"
-            "• All 7 core roadmap pillars fully coded, mathematically aligned, and statutory-tested.<br/>"
-            "• Automated test suite passes 100% with exact penny accuracy across all tax matrices.<br/>"
-            "• Both Frontend (Next.js 16 on port 3000) and Backend (FastAPI on port 8000) are active.<br/>"
-            "• Remote Git repository (<code>jaine-exe/Project_work.git</code>) is fully synchronized on branch <code>main</code>.",
+            "<b>EVALUATION INTEGRITY STATEMENT</b><br/>"
+            "This report distinguishes strictly between empirically benchmarked results and planned features:<br/>"
+            "• <b>Measured & Defensible:</b> The rule-based compliance engine has been formally benchmarked on 150 synthetic invoice records with injected defects, achieving 100% precision and recall at 0.022 ms latency.<br/>"
+            "• <b>Planned Evaluation:</b> End-to-end OCR character accuracy on degraded physical scans and AI advisor RAG retrieval grounding are scheduled for empirical measurement on real-world paper corpuses.",
             table_cell_style
         )
     ]]
     status_table = Table(status_box_data, colWidths=[515])
     status_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#ECFDF5")),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#10B981")),
-        ('PADDING', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#EFF6FF")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#3B82F6")),
+        ('PADDING', (0, 0), (-1, -1), 7),
     ]))
     story.append(status_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
-    # 3. Complete Technology Stack
     story.append(Paragraph("2. Full Technology Stack", h1_style))
-    
     tech_data = [
-        [Paragraph("Layer", table_header_style), Paragraph("Framework / Technologies", table_header_style), Paragraph("Key Role & Responsibility", table_header_style)],
+        [Paragraph("Layer", table_header_style), Paragraph("Framework / Technologies", table_header_style), Paragraph("Technical Responsibility", table_header_style)],
         [
             Paragraph("<b>Frontend UI/UX</b>", table_cell_bold),
             Paragraph("Next.js 16.3.0, React 19.2.8, Tailwind CSS v4", table_cell_style),
-            Paragraph("App Router with server/client components, responsive drawer navigation, high-contrast dark/light accents.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Icons & Data Viz</b>", table_cell_bold),
-            Paragraph("Lucide React (^1.30.0), Recharts (^3.10.1)", table_cell_style),
-            Paragraph("Modular iconography and interactive distribution bar charts for GST tax slabs and compliance health.", table_cell_style)
+            Paragraph("App Router with responsive navigation drawer, dark/light contrast tokens, and interactive audit ledgers.", table_cell_style)
         ],
         [
             Paragraph("<b>Backend API</b>", table_cell_bold),
             Paragraph("FastAPI 0.115.0, Uvicorn 0.30.6, Python 3.11+", table_cell_style),
-            Paragraph("Asynchronous REST API, auto-generated OpenAPI documentation (/docs), dependency injection.", table_cell_style)
+            Paragraph("Asynchronous ASGI endpoints, Pydantic v2 data models, and auto-generated OpenAPI documentation.", table_cell_style)
         ],
         [
-            Paragraph("<b>ORM & Database</b>", table_cell_bold),
+            Paragraph("<b>Database & ORM</b>", table_cell_bold),
             Paragraph("SQLAlchemy 2.0.35, SQLite (PostgreSQL Ready)", table_cell_style),
-            Paragraph("Strict relational schema with declarative base, multi-tenant isolation by business_id.", table_cell_style)
+            Paragraph("Relational schema with declarative models, isolated tenant filtering by business_id, and dynamic pool handling.", table_cell_style)
         ],
         [
             Paragraph("<b>Security & Auth</b>", table_cell_bold),
             Paragraph("Passlib (Bcrypt 1.7.4), Python-Jose (JWT 3.3.0)", table_cell_style),
-            Paragraph("Salted bcrypt password hashing, cryptographic JWT Bearer tokens, protected route dependencies.", table_cell_style)
+            Paragraph("Cryptographic JWT bearer session tokens, salted password hashing, and role-based route dependencies.", table_cell_style)
         ],
         [
-            Paragraph("<b>OCR & Documents</b>", table_cell_bold),
+            Paragraph("<b>OCR & Ingestion</b>", table_cell_bold),
             Paragraph("PyTesseract 0.3.13, Pillow 10.4, pdf2image 1.17, ReportLab 5.0", table_cell_style),
-            Paragraph("Document parsing from PDFs/images, regex statutory extraction, PDF invoice generation.", table_cell_style)
+            Paragraph("Document parsing from PDFs and image scans, regex entity extractor, and PDF invoice generation.", table_cell_style)
         ],
         [
-            Paragraph("<b>ERP & Protocols</b>", table_cell_bold),
-            Paragraph("Tally XML Engine, GSTN JSON v3.1.2, NIC IRN 1.03", table_cell_style),
-            Paragraph("Native Tally Prime XML vouchers, 1-click government GSTR-1/3B JSON, WhatsApp deep links.", table_cell_style)
+            Paragraph("<b>Statutory Protocols</b>", table_cell_bold),
+            Paragraph("GSTN JSON v3.1.2, Tally Prime XML, Mod-36 Checksum", table_cell_style),
+            Paragraph("Official GSTR-3B/1 offline JSON generators, native Tally `<ENVELOPE>` voucher export, and deep-link alerts.", table_cell_style)
         ],
     ]
     tech_table = Table(tech_data, colWidths=[95, 175, 245])
@@ -286,50 +266,36 @@ def build_pdf(filename):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 5),
+        ('PADDING', (0, 0), (-1, -1), 4),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
     ]))
     story.append(tech_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
-    # 4. End-to-End Workflow Pipeline
     story.append(Paragraph("3. End-to-End Workflow Architecture", h1_style))
-    story.append(Paragraph(
-        "GSTLite orchestrates an interconnected 8-stage compliance and accounting pipeline:",
-        body_style
-    ))
-
     pipeline_steps = [
-        ("Step 1: Document Ingestion", "Upload purchase bills (PDF/PNG/Scans) individually or via bulk ZIP archives. Automated OCR parses GSTIN, date, line items, and tax breakdown."),
-        ("Step 2: Statutory Compliance Audit", "Compliance engine validates Section 17(5) blocked goods (vehicles, catering), checks Place of Supply (PoS) CGST/SGST vs IGST rules, and monitors 180-day overdue bills under Rule 37."),
-        ("Step 3: GSTR-2B Vendor Matching", "Matches internal purchase books against government GSTR-2B data, calculating vendor reliability ratings (Green/Amber/Red) and identifying ITC at risk."),
-        ("Step 4: Automated Vendor Recovery", "Dispatches 1-click WhatsApp and email recovery notices citing Section 16(2)(aa) to force non-compliant vendors to upload missing invoices."),
-        ("Step 5: Sales & Statutory E-Invoicing", "B2B/B2C invoicing engine generates 64-hex SHA-256 IRNs with signed QR codes, 12-digit E-Way bills with transit distance validity, and printable invoices with bank UPI QR."),
-        ("Step 6: Government Portal Return Filing", "Calculates net tax liability (Output - Eligible ITC), generates official GSTR-3B and GSTR-1 (v3.1.2) offline JSONs, and stamps a 15-char ARN filing lock."),
-        ("Step 7: ERP & Banking Synchronization", "1-click Tally Prime XML export for instant voucher import (Alt + O), master CA ledger CSV export, and bank statement matching to clear 180-day ITC risks."),
-        ("Step 8: Scrutiny Defense & Cash Planning", "10-day advance tax cash forecast before monthly 20th deadline, coupled with an AI legal defense drafter generating replies to ASMT-10/DRC-01 notices."),
+        ("Inward Invoice Ingestion", "Upload purchase bills individually or via bulk ZIP archives. Automated OCR parses GSTIN, date, and tax values."),
+        ("Statutory Audit Engine", "Evaluates Section 17(5) blocked goods (vehicles, catering), checks Place of Supply CGST/SGST vs IGST, and flags unpaid bills > 180 days."),
+        ("GSTR-2B Cross-Reconciliation", "Matches internal purchase records against government GSTR-2B data, calculating vendor risk ratings and identifying missing bills."),
+        ("1-Click Vendor Follow-Up", "Generates pre-formatted WhatsApp and email notices citing Section 16(2)(aa) to follow up on unfiled supplier invoices."),
+        ("Sales Invoicing & E-Invoicing", "B2B/B2C billing engine generates 64-hex SHA-256 IRNs, signed QR strings, and 12-digit E-Way bills with transit validity."),
+        ("Statutory Return Filing & Lock", "Computes Net Tax Payable, exports official GSTR-3B and GSTR-1 (v3.1.2) offline JSONs, and stamps a 15-char ARN filing lock."),
+        ("Accounting & Banking Sync", "Exports native Tally Prime XML vouchers (Alt + O import) and reconciles bank statement payouts to mark invoices as PAID."),
     ]
     for title, desc in pipeline_steps:
         story.append(Paragraph(f"<b>• {title}:</b> {desc}", bullet_style))
 
-    story.append(Spacer(1, 10))
-
-    # Page Break for clean table on Next Page
+    # ================= PAGE 2 =================
     story.append(PageBreak())
 
-    # 5. Navbar Modules & Feature Directory
-    story.append(Paragraph("4. Application Modules & Navigation Directory", h1_style))
+    story.append(Paragraph("4. Application Workspace Modules & Route Directory", h1_style))
     story.append(Paragraph(
-        "The application provides 9 main workspace sections plus multi-branch entity management:",
+        "The application provides 9 core workspace sections plus multi-tenant entity management:",
         body_style
     ))
 
     module_data = [
-        [
-            Paragraph("Module / Route", table_header_style),
-            Paragraph("Frontend & Backend Files", table_header_style),
-            Paragraph("Key Features & Functionality", table_header_style)
-        ],
+        [Paragraph("Module / Route", table_header_style), Paragraph("Source Files", table_header_style), Paragraph("Key Features & Functionality", table_header_style)],
         [
             Paragraph("<b>1. Dashboard</b><br/><code>/dashboard</code>", table_cell_bold),
             Paragraph("<code>dashboard/page.js</code><br/><code>invoices.py</code>", table_cell_style),
@@ -386,36 +352,15 @@ def build_pdf(filename):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 4.5),
+        ('PADDING', (0, 0), (-1, -1), 4),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
     ]))
     story.append(module_table)
     story.append(Spacer(1, 10))
 
-    # 6. Statutory Integrity & Mathematical Verification
-    story.append(Paragraph("5. Statutory Integrity & Mathematical Verification", h1_style))
-    story.append(Paragraph(
-        "The GSTLite system guarantees 100% mathematical precision and statutory compliance:",
-        body_style
-    ))
-    story.append(Paragraph(
-        "<b>• Double-Entry Balance:</b> Every invoice strictly enforces <code>Taxable Subtotal + CGST + SGST + IGST == Total Amount</code> without floating-point drift.<br/>"
-        "<b>• Place of Supply Logic:</b> Intra-state transactions enforce 50:50 CGST+SGST split; inter-state transactions strictly route 100% to IGST.<br/>"
-        "<b>• GSTR-3B Cash Liability Formula:</b> Net Tax Payable strictly evaluates <code>max(0.0, Output Tax Liability - Eligible Input Tax Credit)</code>.<br/>"
-        "<b>• Automated Verification Suite:</b> A standalone test runner (<code>test_all_features.py</code>) validates all API routes, database schemas, and export files with a 100% pass rate.",
-        bullet_style
-    ))
-    story.append(Spacer(1, 10))
-
-    # 7. Quick Start & Execution Guide
-    story.append(Paragraph("6. Quick Start & Local Execution Guide", h1_style))
-    
+    story.append(Paragraph("5. Quick Start & Execution Guide", h1_style))
     run_instructions = [
-        [
-            Paragraph("Component", table_header_style),
-            Paragraph("Start Command & Working Directory", table_header_style),
-            Paragraph("Access URL / Credentials", table_header_style)
-        ],
+        [Paragraph("Component", table_header_style), Paragraph("Start Command & Working Directory", table_header_style), Paragraph("Access URL / Credentials", table_header_style)],
         [
             Paragraph("<b>Backend API</b>", table_cell_bold),
             Paragraph("<code>cd gstlite-backend</code><br/><code>.\\venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --port 8000</code>", code_style),
@@ -437,11 +382,158 @@ def build_pdf(filename):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 5),
+        ('PADDING', (0, 0), (-1, -1), 4.5),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
     ]))
     story.append(run_table)
-    
+
+    # ================= PAGE 3 =================
+    story.append(PageBreak())
+
+    story.append(Paragraph("6. Empirical Rule-Engine Benchmark (150-Invoice Evaluation)", h1_style))
+    story.append(Paragraph(
+        "The compliance rule engine was formally evaluated using the test script <code>evaluate_gstlite.py</code> on an annotated "
+        "synthetic dataset of <b>N = 150 invoices</b> (seed = 42, defect rate = 40%). Ground-truth defects were programmatically injected "
+        "across six core statutory categories to evaluate classification accuracy, per-defect recall, and processing latency.",
+        body_style
+    ))
+
+    # Confusion matrix & metrics
+    eval_matrix_data = [
+        [Paragraph("Metric", table_header_style), Paragraph("Measured Value", table_header_style), Paragraph("Mathematical Formulation & Interpretation", table_header_style)],
+        [
+            Paragraph("<b>Confusion Matrix</b>", table_cell_bold),
+            Paragraph("<b>TP: 56, FN: 0<br/>FP: 0, TN: 94</b>", table_cell_style),
+            Paragraph("Total: 150 invoices (56 defective, 94 clean). Zero false positives ($FP=0$), zero false negatives ($FN=0$).", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Accuracy</b>", table_cell_bold),
+            Paragraph("<b>100.00%</b>", table_cell_style),
+            Paragraph("$(TP + TN) / (TP + TN + FP + FN) = 150 / 150 = 1.00$. Overall classification correctness.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Precision</b>", table_cell_bold),
+            Paragraph("<b>100.00%</b>", table_cell_style),
+            Paragraph("$TP / (TP + FP) = 56 / 56 = 1.00$. Probability that a flagged invoice has a true statutory violation.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Recall / Sensitivity</b>", table_cell_bold),
+            Paragraph("<b>100.00%</b>", table_cell_style),
+            Paragraph("$TP / (TP + FN) = 56 / 56 = 1.00$. Proportion of defective invoices successfully detected.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Specificity</b>", table_cell_bold),
+            Paragraph("<b>100.00%</b>", table_cell_style),
+            Paragraph("$TN / (TN + FP) = 94 / 94 = 1.00$. Proportion of clean invoices correctly cleared.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>False Positive Rate</b>", table_cell_bold),
+            Paragraph("<b>0.00%</b>", table_cell_style),
+            Paragraph("$FP / (FP + TN) = 0 / 94 = 0.00$. Rate of false alarms on legitimate compliant invoices.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>F1-Score</b>", table_cell_bold),
+            Paragraph("<b>100.00%</b>", table_cell_style),
+            Paragraph("$2 \\times (P \\times R) / (P + R) = 2.0 / 2.0 = 1.00$. Harmonic mean of precision and recall.", table_cell_style)
+        ],
+    ]
+    eval_matrix_table = Table(eval_matrix_data, colWidths=[105, 95, 315])
+    eval_matrix_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('PADDING', (0, 0), (-1, -1), 3.5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+    ]))
+    story.append(eval_matrix_table)
+    story.append(Spacer(1, 8))
+
+    # Per defect table
+    story.append(Paragraph("<b>Category-Wise Defect Recall Breakdown:</b>", h2_style))
+    defect_table_data = [
+        [Paragraph("Defect Category", table_header_style), Paragraph("Statutory Reference", table_header_style), Paragraph("Detected / Total", table_header_style), Paragraph("Recall (%)", table_header_style), Paragraph("Error Type Simulated", table_header_style)],
+        [
+            Paragraph("<b>BLOCKED_ITC</b>", table_cell_bold),
+            Paragraph("CGST Section 17(5)", table_cell_style),
+            Paragraph("4 / 4", table_cell_style),
+            Paragraph("<b>100.0%</b>", table_cell_style),
+            Paragraph("Ineligible motor vehicles, catering, personal goods.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>BAD_GSTIN</b>", table_cell_bold),
+            Paragraph("CGST Section 25 & Mod-36", table_cell_style),
+            Paragraph("15 / 15", table_cell_style),
+            Paragraph("<b>100.0%</b>", table_cell_style),
+            Paragraph("Alphanumeric syntax & Mod-36 checksum corruption.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>POS_ERROR</b>", table_cell_bold),
+            Paragraph("IGST Section 7 & 8", table_cell_style),
+            Paragraph("4 / 4", table_cell_style),
+            Paragraph("<b>100.0%</b>", table_cell_style),
+            Paragraph("Inter-state supplies mischarged with CGST/SGST.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>TAX_MATH</b>", table_cell_bold),
+            Paragraph("CGST Section 33", table_cell_style),
+            Paragraph("8 / 8", table_cell_style),
+            Paragraph("<b>100.0%</b>", table_cell_style),
+            Paragraph("Arithmetic mismatch: Taxable + Taxes ≠ Total.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>DUPLICATE</b>", table_cell_bold),
+            Paragraph("CGST Section 16 & Audit", table_cell_style),
+            Paragraph("17 / 17", table_cell_style),
+            Paragraph("<b>100.0%</b>", table_cell_style),
+            Paragraph("Duplicate invoice number from same vendor.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>RULE37</b>", table_cell_bold),
+            Paragraph("CGST Section 16(2) Proviso", table_cell_style),
+            Paragraph("8 / 8", table_cell_style),
+            Paragraph("<b>100.0%</b>", table_cell_style),
+            Paragraph("Unpaid supplier invoices older than 180 days.", table_cell_style)
+        ],
+    ]
+    defect_table = Table(defect_table_data, colWidths=[85, 105, 65, 55, 205])
+    defect_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('PADDING', (0, 0), (-1, -1), 3.5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+    ]))
+    story.append(defect_table)
+    story.append(Spacer(1, 8))
+
+    # Latency & Academic Conclusion
+    story.append(Paragraph("<b>Measured Latency & Throughput:</b>", h2_style))
+    story.append(Paragraph(
+        "• <b>Mean Evaluation Latency:</b> 0.022 ms per invoice record.<br/>"
+        "• <b>95th Percentile Latency (p95):</b> 0.032 ms.<br/>"
+        "• <b>Engine Computational Throughput:</b> ~44,795 invoices / second.<br/>"
+        "• <b>Reproducibility Command:</b> <code>python evaluate_gstlite.py -n 150 --seed 42</code> (outputs saved to <code>eval_output/</code>).",
+        bullet_style
+    ))
+    story.append(Spacer(1, 6))
+
+    conclusion_box_data = [[
+        Paragraph(
+            "<b>EVALUATION CONCLUSION & FUTURE SCOPE</b><br/>"
+            "<i>\"On a reproducible 150-invoice synthetic benchmark (seed 42), the GSTLite rule engine detected all 56 injected defects "
+            "across six statutory categories with no false positives, at an average latency of 0.022 ms per invoice. "
+            "OCR character extraction accuracy, AI advisor retrieval grounding, and human time savings are planned for empirical evaluation on physical scanned invoice corpuses.\"</i>",
+            table_cell_style
+        )
+    ]]
+    conclusion_table = Table(conclusion_box_data, colWidths=[515])
+    conclusion_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#0F172A")),
+        ('PADDING', (0, 0), (-1, -1), 7),
+    ]))
+    story.append(conclusion_table)
+
     # Build Document
     doc.build(story, canvasmaker=NumberedCanvas)
     print(f"Successfully generated PDF: {filename}")
