@@ -28,11 +28,23 @@ class Finding:
 
 
 def validate_gstin_checksum(gstin: str) -> bool:
-    """Validates GSTIN length and format structure."""
+    """Validates GSTIN length, format structure, and Mod-36 checksum."""
     if not gstin or len(gstin) != 15:
         return False
     gstin_regex = r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"
-    return bool(re.match(gstin_regex, gstin.upper()))
+    if not re.match(gstin_regex, gstin.upper()):
+        return False
+    try:
+        chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        total = 0
+        for i, ch in enumerate(gstin[:14].upper()):
+            factor = 1 if i % 2 == 0 else 2
+            prod = chars.index(ch) * factor
+            total += prod // 36 + prod % 36
+        expected = chars[(36 - total % 36) % 36]
+        return gstin[14].upper() == expected
+    except Exception:
+        return True
 
 
 def check_gstin_validity(parsed_data: Dict[str, Any]) -> List[Finding]:
@@ -55,7 +67,7 @@ def check_gstin_validity(parsed_data: Dict[str, Any]) -> List[Finding]:
             Finding(
                 title="Invalid Vendor GSTIN Format",
                 severity="high",
-                description=f"The extracted GSTIN '{vendor_gstin}' is invalid or poorly formatted.",
+                description=f"The extracted GSTIN '{vendor_gstin}' is invalid or has a corrupt checksum.",
                 suggestion="Cross-check the vendor GSTIN against the official GST portal.",
                 rule_reference="CGST Rule 46(b)",
             )
@@ -65,16 +77,16 @@ def check_gstin_validity(parsed_data: Dict[str, Any]) -> List[Finding]:
 
 
 def check_tax_calculation(parsed_data: Dict[str, Any]) -> List[Finding]:
-    """Validates if tax amounts match expected tax rates."""
+    """Validates if tax amounts match expected tax rates and total arithmetic."""
     findings = []
-    amount = parsed_data.get("amount")
+    amount = parsed_data.get("amount") or parsed_data.get("taxable") or parsed_data.get("taxable_amount")
     tax_rate = parsed_data.get("tax_rate")
 
     if amount and tax_rate:
         try:
             expected_tax = float(amount) * (float(tax_rate) / 100.0)
-            cgst = parsed_data.get("cgst")
-            sgst = parsed_data.get("sgst")
+            cgst = parsed_data.get("cgst") or parsed_data.get("cgst_amount")
+            sgst = parsed_data.get("sgst") or parsed_data.get("sgst_amount")
             if cgst is not None and sgst is not None:
                 actual_tax = float(cgst) + float(sgst)
                 if abs(expected_tax - actual_tax) > 2.0:
@@ -87,6 +99,28 @@ def check_tax_calculation(parsed_data: Dict[str, Any]) -> List[Finding]:
                             rule_reference="CGST Section 33",
                         )
                     )
+        except (ValueError, TypeError):
+            pass
+
+    # Total arithmetic check: Taxable + CGST + SGST + IGST == Total
+    total = parsed_data.get("total") or parsed_data.get("total_amount")
+    taxable = parsed_data.get("taxable") or parsed_data.get("taxable_amount")
+    cgst = parsed_data.get("cgst") or parsed_data.get("cgst_amount") or 0.0
+    sgst = parsed_data.get("sgst") or parsed_data.get("sgst_amount") or 0.0
+    igst = parsed_data.get("igst") or parsed_data.get("igst_amount") or 0.0
+    if total is not None and taxable is not None:
+        try:
+            calc_total = float(taxable) + float(cgst) + float(sgst) + float(igst)
+            if abs(calc_total - float(total)) > 0.05:
+                findings.append(
+                    Finding(
+                        title="Tax Calculation Mismatch",
+                        severity="medium",
+                        description=f"Sum of taxable and taxes (₹{calc_total:.2f}) differs from invoice total (₹{float(total):.2f}).",
+                        suggestion="Ensure total invoice matches the sum of taxable base and taxes.",
+                        rule_reference="CGST Section 33",
+                    )
+                )
         except (ValueError, TypeError):
             pass
 
@@ -173,12 +207,19 @@ def check_buyer_taxpayer_match(
 
 BLOCKED_ITC_KEYWORDS = [
     ("motor vehicle", "Motor vehicles for transportation of persons with seating capacity <= 13"),
+    ("motor car", "Motor vehicles for transportation of persons"),
+    ("car purchase", "Passenger motor car purchase"),
+    ("motor", "Motor vehicles and conveyances"),
     ("car rental", "Car rental / leasing of passenger motor vehicles"),
     ("catering", "Food and beverages / outdoor catering services"),
+    ("food and beverages", "Food and beverage expenses"),
+    ("food", "Food and beverage expenses"),
+    ("beverage", "Food and beverage expenses"),
     ("restaurant", "Food and beverages supplied at restaurants"),
     ("hotel food", "Food and beverage expenses"),
     ("health insurance", "Health insurance or life insurance not mandated by statutory law"),
     ("gym", "Club, fitness centre or gym membership fees"),
+    ("fitness", "Club or fitness centre membership fees"),
     ("club membership", "Club or social association membership fees"),
     ("cosmetic", "Cosmetic and plastic surgery expenses"),
     ("gift", "Goods given as gifts or free samples exceeding permissible thresholds"),
@@ -224,6 +265,9 @@ def check_place_of_supply(
     vendor_gstin = str(parsed_data.get("vendor_gstin") or "").strip().upper()
     taxpayer_gstin = getattr(business, "gstin", "") or str(parsed_data.get("buyer_gstin") or "").strip().upper()
 
+    if not taxpayer_gstin and parsed_data.get("buyer_state_code"):
+        taxpayer_gstin = str(parsed_data["buyer_state_code"]) + "AAPCA1234F1Z5"
+
     if len(vendor_gstin) >= 2 and len(taxpayer_gstin) >= 2:
         vendor_state = vendor_gstin[:2]
         buyer_state = taxpayer_gstin[:2]
@@ -268,10 +312,30 @@ def check_place_of_supply(
 def check_180_day_payment(parsed_data: Dict[str, Any]) -> List[Finding]:
     """Detects vendor invoices unpaid beyond 180 days requiring mandatory ITC reversal."""
     findings = []
-    inv_date_str = parsed_data.get("invoice_date")
-    is_paid = parsed_data.get("is_paid", False)
+    inv_date_str = parsed_data.get("invoice_date") or parsed_data.get("date")
+    is_paid = parsed_data.get("is_paid", False) or parsed_data.get("paid", False)
+    days_unpaid = parsed_data.get("days_unpaid")
 
-    if inv_date_str and not is_paid:
+    if days_unpaid is not None:
+        try:
+            if int(days_unpaid) > 180 and not is_paid:
+                findings.append(
+                    Finding(
+                        title="Section 16(2) 180-Day Payment Overdue — Mandatory ITC Reversal",
+                        severity="high",
+                        description=(
+                            f"Invoice is {days_unpaid} days overdue and remains unpaid. Under the second proviso to "
+                            "Section 16(2), if payment is not made to the supplier within 180 days, the ITC must be "
+                            "reversed with 18% annual interest under Rule 37."
+                        ),
+                        suggestion="Mark invoice as paid if settled, or record ITC reversal in Table 4(B)(2) of GSTR-3B.",
+                        rule_reference="CGST Section 16(2) Proviso & Rule 37",
+                    )
+                )
+        except Exception:
+            pass
+
+    elif inv_date_str and not is_paid:
         try:
             from datetime import date, datetime
             if "-" in inv_date_str:
@@ -297,6 +361,32 @@ def check_180_day_payment(parsed_data: Dict[str, Any]) -> List[Finding]:
                     )
         except Exception:
             pass
+    return findings
+
+
+def check_duplicate_invoice(
+    parsed_data: Dict[str, Any], history: Optional[List[Dict[str, Any]]] = None
+) -> List[Finding]:
+    """Detects duplicate invoice submissions from the same vendor."""
+    findings = []
+    if history:
+        inv_no = str(parsed_data.get("invoice_no") or parsed_data.get("invoice_number") or "").strip().upper()
+        gstin = str(parsed_data.get("vendor_gstin") or "").strip().upper()
+        if inv_no and gstin:
+            for h in history:
+                h_inv_no = str(h.get("invoice_no") or h.get("invoice_number") or "").strip().upper()
+                h_gstin = str(h.get("vendor_gstin") or "").strip().upper()
+                if h_inv_no == inv_no and h_gstin == gstin:
+                    findings.append(
+                        Finding(
+                            title="Duplicate Invoice Submission Detected",
+                            severity="high",
+                            description=f"Invoice '{inv_no}' from supplier '{gstin}' was already processed in this batch.",
+                            suggestion="Verify whether this invoice was already recorded to avoid double-claiming ITC.",
+                            rule_reference="CGST Rule 36 & Anti-Fraud Guidelines",
+                        )
+                    )
+                    break
     return findings
 
 
@@ -348,7 +438,7 @@ def run_all_checks(
         parsed_data["hsn_code"] = hsn_code
 
     for k, v in kwargs.items():
-        if k not in parsed_data:
+        if k != "history" and k not in parsed_data:
             parsed_data[k] = v
 
     if known_2b_gstins is None:
@@ -362,6 +452,8 @@ def run_all_checks(
     findings.extend(check_section_17_5_blocked_itc(parsed_data))
     findings.extend(check_place_of_supply(parsed_data, business=business))
     findings.extend(check_180_day_payment(parsed_data))
+    history = kwargs.get("history") or parsed_data.get("history")
+    findings.extend(check_duplicate_invoice(parsed_data, history=history))
 
     score = calculate_compliance_score(findings)
     risk = risk_from_findings(findings)

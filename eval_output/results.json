@@ -1,0 +1,51 @@
+{
+  "TP": 56,
+  "FP": 0,
+  "TN": 94,
+  "FN": 0,
+  "accuracy": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "specificity": 1.0,
+  "false_positive_rate": 0.0,
+  "f1": 1.0,
+  "n_invoices": 150,
+  "seed": 42,
+  "per_defect_recall": {
+    "BLOCKED_ITC": {
+      "detected": 4,
+      "total": 4,
+      "recall": 1.0
+    },
+    "BAD_GSTIN": {
+      "detected": 15,
+      "total": 15,
+      "recall": 1.0
+    },
+    "POS_ERROR": {
+      "detected": 4,
+      "total": 4,
+      "recall": 1.0
+    },
+    "TAX_MATH": {
+      "detected": 8,
+      "total": 8,
+      "recall": 1.0
+    },
+    "DUPLICATE": {
+      "detected": 17,
+      "total": 17,
+      "recall": 1.0
+    },
+    "RULE37": {
+      "detected": 8,
+      "total": 8,
+      "recall": 1.0
+    }
+  },
+  "latency_ms": {
+    "mean": 0.022324000019580126,
+    "p95": 0.032100011594593525,
+    "throughput_per_sec": 44794.83959518507
+  }
+}
