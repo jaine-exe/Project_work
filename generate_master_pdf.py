@@ -404,37 +404,37 @@ def build_pdf(filename):
         [
             Paragraph("<b>Confusion Matrix</b>", table_cell_bold),
             Paragraph("<b>TP: 56, FN: 0<br/>FP: 0, TN: 94</b>", table_cell_style),
-            Paragraph("Total: 150 invoices (56 defective, 94 clean). Zero false positives ($FP=0$), zero false negatives ($FN=0$).", table_cell_style)
+            Paragraph("Total: 150 invoices (56 defective, 94 clean). Zero false positives (FP = 0), zero false negatives (FN = 0).", table_cell_style)
         ],
         [
             Paragraph("<b>Accuracy</b>", table_cell_bold),
             Paragraph("<b>100.00%</b>", table_cell_style),
-            Paragraph("$(TP + TN) / (TP + TN + FP + FN) = 150 / 150 = 1.00$. Overall classification correctness.", table_cell_style)
+            Paragraph("(TP + TN) / (TP + TN + FP + FN) = 150 / 150 = 1.00. Overall classification correctness.", table_cell_style)
         ],
         [
             Paragraph("<b>Precision</b>", table_cell_bold),
             Paragraph("<b>100.00%</b>", table_cell_style),
-            Paragraph("$TP / (TP + FP) = 56 / 56 = 1.00$. Probability that a flagged invoice has a true statutory violation.", table_cell_style)
+            Paragraph("TP / (TP + FP) = 56 / 56 = 1.00. Probability that a flagged invoice has a true statutory violation.", table_cell_style)
         ],
         [
             Paragraph("<b>Recall / Sensitivity</b>", table_cell_bold),
             Paragraph("<b>100.00%</b>", table_cell_style),
-            Paragraph("$TP / (TP + FN) = 56 / 56 = 1.00$. Proportion of defective invoices successfully detected.", table_cell_style)
+            Paragraph("TP / (TP + FN) = 56 / 56 = 1.00. Proportion of defective invoices successfully detected.", table_cell_style)
         ],
         [
             Paragraph("<b>Specificity</b>", table_cell_bold),
             Paragraph("<b>100.00%</b>", table_cell_style),
-            Paragraph("$TN / (TN + FP) = 94 / 94 = 1.00$. Proportion of clean invoices correctly cleared.", table_cell_style)
+            Paragraph("TN / (TN + FP) = 94 / 94 = 1.00. Proportion of clean invoices correctly cleared.", table_cell_style)
         ],
         [
             Paragraph("<b>False Positive Rate</b>", table_cell_bold),
             Paragraph("<b>0.00%</b>", table_cell_style),
-            Paragraph("$FP / (FP + TN) = 0 / 94 = 0.00$. Rate of false alarms on legitimate compliant invoices.", table_cell_style)
+            Paragraph("FP / (FP + TN) = 0 / 94 = 0.00. Rate of false alarms on legitimate compliant invoices.", table_cell_style)
         ],
         [
             Paragraph("<b>F1-Score</b>", table_cell_bold),
             Paragraph("<b>100.00%</b>", table_cell_style),
-            Paragraph("$2 \\times (P \\times R) / (P + R) = 2.0 / 2.0 = 1.00$. Harmonic mean of precision and recall.", table_cell_style)
+            Paragraph("2 × (P × R) / (P + R) = 2.0 / 2.0 = 1.00. Harmonic mean of precision and recall.", table_cell_style)
         ],
     ]
     eval_matrix_table = Table(eval_matrix_data, colWidths=[105, 95, 315])
