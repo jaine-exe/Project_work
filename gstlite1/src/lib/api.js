@@ -119,6 +119,8 @@ export const compliance = {
     form.append("period", period);
     return request("/api/compliance/gstr2b/demo", { method: "POST", body: form, isForm: true });
   },
+  optimization: (period) =>
+    request(`/api/compliance/optimization${period ? `?period=${period}` : ""}`),
 };
 
 // ---- GST ----

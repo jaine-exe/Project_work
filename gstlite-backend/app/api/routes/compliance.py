@@ -99,3 +99,20 @@ def get_gstr2b_reconciliation(
     from app.services.gstr2b_reconciler import get_reconciliation_report
 
     return get_reconciliation_report(db, business.id, period=period)
+
+
+@router.get("/optimization")
+def get_tax_optimization_engine(
+    period: str = "2026-07",
+    business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db),
+):
+    """
+    Rule-Grounded GST Relief and Tax Optimization Engine:
+    Identifies legally applicable GST exemptions, concessional rates,
+    eligible Input Tax Credit (ITC), and suitable GST schemes based on
+    business details and individual transactions.
+    """
+    from app.services.tax_optimization import get_tax_relief_and_optimization
+
+    return get_tax_relief_and_optimization(db, business, period=period)
