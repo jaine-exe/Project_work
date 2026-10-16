@@ -79,32 +79,48 @@ def check_gstin_validity(parsed_data: Dict[str, Any]) -> List[Finding]:
 def check_tax_calculation(parsed_data: Dict[str, Any]) -> List[Finding]:
     """Validates if tax amounts match expected tax rates and total arithmetic."""
     findings = []
-    amount = parsed_data.get("amount") or parsed_data.get("taxable") or parsed_data.get("taxable_amount")
+    # Prefer taxable_amount over gross total amount
+    taxable_base = parsed_data.get("taxable_amount") or parsed_data.get("taxable") or parsed_data.get("subtotal")
     tax_rate = parsed_data.get("tax_rate")
 
-    if amount and tax_rate:
+    # If only gross amount exists, calculate taxable base backwards
+    if not taxable_base and parsed_data.get("total_amount") and tax_rate:
         try:
-            expected_tax = float(amount) * (float(tax_rate) / 100.0)
+            taxable_base = float(parsed_data.get("total_amount")) / (1.0 + (float(tax_rate) / 100.0))
+        except Exception:
+            pass
+    elif not taxable_base and parsed_data.get("amount") and tax_rate:
+        taxable_base = parsed_data.get("amount")
+
+    if taxable_base and tax_rate:
+        try:
+            expected_tax = float(taxable_base) * (float(tax_rate) / 100.0)
             cgst = parsed_data.get("cgst") or parsed_data.get("cgst_amount")
             sgst = parsed_data.get("sgst") or parsed_data.get("sgst_amount")
-            if cgst is not None and sgst is not None:
-                actual_tax = float(cgst) + float(sgst)
-                if abs(expected_tax - actual_tax) > 2.0:
-                    findings.append(
-                        Finding(
-                            title="Tax Calculation Mismatch",
-                            severity="medium",
-                            description=f"Expected tax calculation (₹{expected_tax:.2f}) differs from stated tax (₹{actual_tax:.2f}).",
-                            suggestion="Recalculate line-item values and tax rates.",
-                            rule_reference="CGST Section 33",
-                        )
+            igst = parsed_data.get("igst") or parsed_data.get("igst_amount")
+            
+            actual_tax = None
+            if cgst is not None or sgst is not None:
+                actual_tax = float(cgst or 0.0) + float(sgst or 0.0)
+            elif igst is not None:
+                actual_tax = float(igst)
+
+            if actual_tax is not None and abs(expected_tax - actual_tax) > 2.0:
+                findings.append(
+                    Finding(
+                        title="Tax Calculation Mismatch",
+                        severity="medium",
+                        description=f"Expected tax calculation (₹{expected_tax:.2f}) differs from stated tax (₹{actual_tax:.2f}).",
+                        suggestion="Recalculate line-item values and tax rates.",
+                        rule_reference="CGST Section 33",
                     )
+                )
         except (ValueError, TypeError):
             pass
 
     # Total arithmetic check: Taxable + CGST + SGST + IGST == Total
     total = parsed_data.get("total") or parsed_data.get("total_amount")
-    taxable = parsed_data.get("taxable") or parsed_data.get("taxable_amount")
+    taxable = parsed_data.get("taxable_amount") or parsed_data.get("taxable")
     cgst = parsed_data.get("cgst") or parsed_data.get("cgst_amount") or 0.0
     sgst = parsed_data.get("sgst") or parsed_data.get("sgst_amount") or 0.0
     igst = parsed_data.get("igst") or parsed_data.get("igst_amount") or 0.0
@@ -128,11 +144,20 @@ def check_tax_calculation(parsed_data: Dict[str, Any]) -> List[Finding]:
 
 
 def check_2b_reconciliation(
-    parsed_data: Dict[str, Any], known_2b_gstins: set
+    parsed_data: Dict[str, Any], known_2b_gstins: set, business: Optional[Any] = None
 ) -> List[Finding]:
-    """Checks whether the vendor GSTIN is present in the local GSTR-2B registry."""
+    """Checks whether the vendor GSTIN is present in the local GSTR-2B registry (Purchases only)."""
     findings = []
+    
+    # Skip GSTR-2B check for sales invoices
+    taxpayer_gstin = getattr(business, "gstin", None) if business else parsed_data.get("taxpayer_gstin")
     vendor_gstin = parsed_data.get("vendor_gstin")
+    is_sales = (
+        parsed_data.get("document_type") == "sales"
+        or (taxpayer_gstin and vendor_gstin and str(vendor_gstin).strip().upper() == str(taxpayer_gstin).strip().upper())
+    )
+    if is_sales:
+        return []
 
     if vendor_gstin and known_2b_gstins and vendor_gstin not in known_2b_gstins:
         findings.append(
@@ -152,19 +177,48 @@ def check_buyer_taxpayer_match(
     parsed_data: Dict[str, Any], business: Optional[Any] = None
 ) -> List[Finding]:
     """
-    Checks if the invoice buyer matches the registered taxpayer entity.
+    For Purchase Invoices: Checks if the invoice buyer matches the registered taxpayer entity (claiming ITC).
+    For Sales Invoices: Checks if the invoice seller matches the registered taxpayer entity (issuing invoice).
     """
     findings = []
-    buyer_name = parsed_data.get("buyer_name")
-    buyer_gstin = parsed_data.get("buyer_gstin")
 
     taxpayer_name = getattr(business, "name", None) if business else parsed_data.get("taxpayer_name")
     taxpayer_gstin = getattr(business, "gstin", None) if business else parsed_data.get("taxpayer_gstin")
 
     if not taxpayer_name:
-        taxpayer_name = "Ashoka Textiles Pvt. Ltd."
+        taxpayer_name = "Kaveri Home Furnishings"
     if not taxpayer_gstin:
-        taxpayer_gstin = "32AACCA1234F1Z5"
+        taxpayer_gstin = "29AAFFK4812M1Z0"
+
+    vendor_gstin = parsed_data.get("vendor_gstin")
+    is_sales = (
+        parsed_data.get("document_type") == "sales"
+        or (taxpayer_gstin and vendor_gstin and str(vendor_gstin).strip().upper() == str(taxpayer_gstin).strip().upper())
+    )
+
+    if is_sales:
+        # On a SALES invoice, the taxpayer is the SELLER (vendor).
+        # We only check that the seller matches the taxpayer profile.
+        # The buyer is the customer, so having a different buyer is expected and correct!
+        if vendor_gstin and taxpayer_gstin:
+            if str(vendor_gstin).upper().strip() != str(taxpayer_gstin).upper().strip():
+                findings.append(
+                    Finding(
+                        title="Seller GSTIN Mismatch",
+                        severity="high",
+                        description=(
+                            f"Sales invoice seller GSTIN '{vendor_gstin}' does not match your registered GSTIN "
+                            f"'{taxpayer_gstin}'."
+                        ),
+                        suggestion="Ensure sales invoices are issued under your registered business GSTIN.",
+                        rule_reference="CGST Section 31 & Rule 46",
+                    )
+                )
+        return findings
+
+    # PURCHASE INVOICE: The taxpayer is the BUYER
+    buyer_name = parsed_data.get("buyer_name")
+    buyer_gstin = parsed_data.get("buyer_gstin")
 
     if buyer_name:
         clean_buyer = re.sub(r"[^a-zA-Z0-9]", "", buyer_name.lower())
@@ -447,9 +501,10 @@ def run_all_checks(
     findings: List[Finding] = []
     findings.extend(check_gstin_validity(parsed_data))
     findings.extend(check_tax_calculation(parsed_data))
-    findings.extend(check_2b_reconciliation(parsed_data, known_2b_gstins))
+    findings.extend(check_2b_reconciliation(parsed_data, known_2b_gstins, business=business))
     findings.extend(check_buyer_taxpayer_match(parsed_data, business=business))
-    findings.extend(check_section_17_5_blocked_itc(parsed_data))
+    if parsed_data.get("document_type") != "sales":
+        findings.extend(check_section_17_5_blocked_itc(parsed_data))
     findings.extend(check_place_of_supply(parsed_data, business=business))
     findings.extend(check_180_day_payment(parsed_data))
     history = kwargs.get("history") or parsed_data.get("history")
