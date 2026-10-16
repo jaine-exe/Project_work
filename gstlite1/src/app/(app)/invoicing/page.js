@@ -719,14 +719,30 @@ export default function InvoicingPage() {
                   </p>
                   <p className="text-xs text-slate-500">{business?.state || "State"}, India</p>
                 </div>
-                <div className="text-right">
-                  <span className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-900">
-                    TAX INVOICE
-                  </span>
-                  <p className="font-mono-data font-bold text-sm text-slate-900 mt-2">
-                    {activePrintInv.invoice_number}
-                  </p>
-                  <p className="text-xs text-slate-500">Date: {activePrintInv.invoice_date}</p>
+                <div className="flex items-start gap-4">
+                  {(activePrintInv.irn_signed_qr || activePrintInv.irn) && (
+                    <div className="flex flex-col items-center text-center">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&margin=2&data=${encodeURIComponent(
+                          activePrintInv.irn_signed_qr || `GSTN_IRP:${activePrintInv.irn}`
+                        )}`}
+                        alt="IRP Signed QR Code"
+                        className="w-20 h-20 rounded border border-slate-200 bg-white p-1 shadow-sm"
+                      />
+                      <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tight">
+                        IRP Signed QR
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <span className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-900">
+                      TAX INVOICE
+                    </span>
+                    <p className="font-mono-data font-bold text-sm text-slate-900 mt-2">
+                      {activePrintInv.invoice_number}
+                    </p>
+                    <p className="text-xs text-slate-500">Date: {activePrintInv.invoice_date}</p>
+                  </div>
                 </div>
               </div>
 
