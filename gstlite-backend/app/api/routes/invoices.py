@@ -62,7 +62,18 @@ def _process_invoice_background(invoice_id: str, business_id: str):
         business = db.query(Business).filter(Business.id == business_id).first()
 
         try:
-            # Query existing vendor GSTINs dynamically and extract safely from rows/tuples
+            # Query verified vendor GSTINs from GSTR-2B entries and existing invoices
+            known_2b_gstins = set()
+            try:
+                from app.db.models import Gstr2bEntry
+                gstr2b_rows = db.query(Gstr2bEntry.supplier_gstin).filter(Gstr2bEntry.business_id == business_id).all()
+                for r in gstr2b_rows:
+                    val = r[0] if isinstance(r, (tuple, list)) else getattr(r, "supplier_gstin", r)
+                    if val:
+                        known_2b_gstins.add(str(val).strip().upper())
+            except Exception:
+                pass
+
             known_rows = (
                 db.query(Invoice.vendor_gstin)
                 .filter(
@@ -71,8 +82,6 @@ def _process_invoice_background(invoice_id: str, business_id: str):
                 )
                 .all()
             )
-
-            known_2b_gstins = set()
             for row in known_rows:
                 gstin_val = (
                     row[0]
@@ -80,7 +89,7 @@ def _process_invoice_background(invoice_id: str, business_id: str):
                     else getattr(row, "vendor_gstin", row)
                 )
                 if gstin_val:
-                    known_2b_gstins.add(gstin_val)
+                    known_2b_gstins.add(str(gstin_val).strip().upper())
 
             # Run Multi-Agent Manager pipeline directly
             manager = ManagerAgent()

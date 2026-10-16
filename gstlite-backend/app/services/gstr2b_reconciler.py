@@ -39,47 +39,75 @@ def parse_and_save_gstr2b(
 
     entries_to_add: List[Gstr2bEntry] = []
 
+    def _find_b2b_list(d: Any) -> Optional[List[Dict[str, Any]]]:
+        if not isinstance(d, dict):
+            return None
+        if "b2b" in d and isinstance(d["b2b"], list):
+            return d["b2b"]
+        for v in d.values():
+            if isinstance(v, dict):
+                res = _find_b2b_list(v)
+                if res is not None:
+                    return res
+        return None
+
+    def _find_period(d: Any) -> Optional[str]:
+        if not isinstance(d, dict):
+            return None
+        for k in ["rtnprd", "fp", "ret_period", "period"]:
+            if k in d and d[k]:
+                val = str(d[k]).replace("-", "").strip()
+                if len(val) == 6 and val.isdigit():
+                    # Format MMYYYY (e.g. 062026 -> 2026-06)
+                    return f"{val[2:]}-{val[:2]}"
+                elif len(val) == 7 and "-" in str(d[k]):
+                    return str(d[k])
+        for v in d.values():
+            if isinstance(v, dict):
+                res = _find_period(v)
+                if res is not None:
+                    return res
+        return None
+
+    detected_period = _find_period(data) if isinstance(data, dict) else None
+    period = detected_period or default_period
+
+    b2b_list = _find_b2b_list(data) if isinstance(data, dict) else None
+
     # 1. Official GST Portal GSTR-2B format
-    # Hierarchy: data.docdata.b2b or docdata.b2b or b2b
-    docdata = data
-    if isinstance(data, dict):
-        if "data" in data and isinstance(data["data"], dict):
-            docdata = data["data"]
-        if "docdata" in docdata and isinstance(docdata["docdata"], dict):
-            docdata = docdata["docdata"]
-
-    period = default_period
-    if isinstance(data, dict):
-        fp = data.get("fp")
-        if fp and len(str(fp)) == 6:
-            # e.g. "072026" -> "2026-07"
-            mm, yyyy = str(fp)[:2], str(fp)[2:]
-            period = f"{yyyy}-{mm}"
-
-    if isinstance(docdata, dict) and "b2b" in docdata:
-        b2b_list = docdata.get("b2b", [])
+    if b2b_list is not None:
         for supplier in b2b_list:
-            ctin = supplier.get("ctin", "")
-            cname = supplier.get("cname") or supplier.get("trade_name") or ""
+            ctin = supplier.get("ctin") or supplier.get("gstin", "")
+            cname = supplier.get("trdnm") or supplier.get("cname") or supplier.get("trade_name") or supplier.get("legal_name", "")
             inv_list = supplier.get("inv", [])
             for inv in inv_list:
-                inum = str(inv.get("inum", ""))
-                idt = str(inv.get("idt", ""))
-                val = float(inv.get("val", 0.0) or 0.0)
-                itcavl = inv.get("itcavl", "Y")
+                inum = str(inv.get("inum") or inv.get("inv_num") or inv.get("invoice_number", ""))
+                idt = str(inv.get("dt") or inv.get("idt") or inv.get("invoice_date", ""))
+                val = float(inv.get("val") or inv.get("total_amount", 0.0) or 0.0)
+                itcavl = inv.get("itcavl") or inv.get("itc_available", "Y")
 
-                items = inv.get("items", [])
+                items = inv.get("items") or inv.get("itms") or []
                 txval = 0.0
                 tax = 0.0
                 rate = 18.0
-                for item in items:
-                    txval += float(item.get("txval", 0.0) or 0.0)
-                    iamt = float(item.get("iamt", 0.0) or 0.0)
-                    camt = float(item.get("camt", 0.0) or 0.0)
-                    samt = float(item.get("samt", 0.0) or 0.0)
-                    tax += iamt + camt + samt
-                    if "rt" in item:
-                        rate = float(item.get("rt") or 18.0)
+                if items:
+                    for item in items:
+                        det = item.get("itm_det", item)
+                        txval += float(det.get("txval", 0.0) or 0.0)
+                        iamt = float(det.get("iamt", 0.0) or det.get("igst", 0.0) or 0.0)
+                        camt = float(det.get("camt", 0.0) or det.get("cgst", 0.0) or 0.0)
+                        samt = float(det.get("samt", 0.0) or det.get("sgst", 0.0) or 0.0)
+                        tax += iamt + camt + samt
+                        if "rt" in det:
+                            rate = float(det["rt"])
+                else:
+                    txval = float(inv.get("txval", 0.0) or 0.0)
+                    iamt = float(inv.get("igst", 0.0) or 0.0)
+                    camt = float(inv.get("cgst", 0.0) or 0.0)
+                    samt = float(inv.get("sgst", 0.0) or 0.0)
+                    tax = iamt + camt + samt
+                    if txval > 0:
+                        rate = round((tax / txval) * 100, 1)
 
                 entries_to_add.append(
                     Gstr2bEntry(
