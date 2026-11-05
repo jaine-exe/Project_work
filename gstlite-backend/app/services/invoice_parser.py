@@ -74,7 +74,8 @@ def parse_invoice_text(text: str) -> Dict[str, Any]:
     # 2. Invoice Date
     invoice_date = None
     date_patterns = [
-        r"(?:INVOICE\s*DATE|BILL\s*DATE|DATE)\s*[:\-\s]*\n*([0-9]{1,2}[-/\.][0-9]{1,2}[-/\.][0-9]{2,4}|[0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})",
+        r"(?:INVOICE\s*DATE|BILL\s*DATE|DATE)\s*[:\-\s]*\n*([0-9]{4}[-/\.][0-9]{1,2}[-/\.][0-9]{1,2}|[0-9]{1,2}[-/\.][0-9]{1,2}[-/\.][0-9]{2,4}|[0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})",
+        r"\b([0-9]{4}[-/\.][0-9]{1,2}[-/\.][0-9]{1,2})\b",
         r"\b([0-9]{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+[0-9]{4})\b",
     ]
     for pattern in date_patterns:
@@ -102,22 +103,40 @@ def parse_invoice_text(text: str) -> Dict[str, Any]:
     vendor_name = None
     buyer_name = None
 
-    m_vend = re.search(r"(?:VENDOR\s*\/\s*SUPPLIER|SELLER)\s*[\n\r\s]+([^\n\r]+)", text, re.I)
-    if m_vend and not re.search(r"(?:address|gstin|state|tax|invoice)", m_vend.group(1), re.I):
-        vendor_name = m_vend.group(1).strip()
-    else:
-        # Fallback vendor matching legal suffix
-        m_corp = re.search(r"([A-Z0-9\s&\.\'-]+(?:Pvt\.?\s*Ltd\.?|Private Limited|Limited|Inc\.?|Traders|Enterprise|Services|Works|Mills|Hub|Co))", text, re.I)
-        if m_corp:
-            vendor_name = m_corp.group(1).strip()
+    # Line preceding vendor GSTIN is highly reliable
+    if vendor_gstin:
+        m_prec = re.search(r"([^\n\r]+)[\n\r]+(?:GSTIN\s*[:\-\s]*)?" + re.escape(vendor_gstin), text, re.I)
+        if m_prec and not re.search(r"supplier|recipient|billed|invoice|customer|buyer|state|place", m_prec.group(1), re.I):
+            c_name = m_prec.group(1).strip()
+            if len(c_name) > 3 and not c_name.lower().startswith("kerala"):
+                vendor_name = c_name
 
-    m_buyer = re.search(r"(?:BILLED\s*TO\s*(?:\([^\)]+\))?|BUYER|CUSTOMER)\s*[\n\r\s]+([^\n\r]+)", text, re.I)
-    if m_buyer and not re.search(r"(?:address|gstin|state|tax|invoice)", m_buyer.group(1), re.I):
-        buyer_name = m_buyer.group(1).strip()
-    else:
-        m_buyer_alt = re.search(r"(?:BUYER|CUSTOMER|RECIPIENT)\s*[:\-\n\s]+([A-Za-z0-9\s&\.\'-]{3,50})", text, re.I)
-        if m_buyer_alt:
-            buyer_name = m_buyer_alt.group(1).strip()
+    if not vendor_name:
+        m_vend = re.search(r"(?:VENDOR\s*\/\s*SUPPLIER|SELLER)\s*[\n\r\s]+([^\n\r]+)", text, re.I)
+        if m_vend and not re.search(r"(?:address|gstin|state|tax|invoice)", m_vend.group(1), re.I):
+            vendor_name = m_vend.group(1).strip()
+        else:
+            # Fallback vendor matching legal suffix (with word boundaries to avoid 'State Code' -> 'State Co')
+            m_corp = re.search(r"([A-Z0-9\s&\.\'-]+(?:Pvt\.?\s*Ltd\.?|Private Limited|Limited|Inc\.?|Traders|Enterprise|Services|Works|Mills|Hub|\bCo\b))", text, re.I)
+            if m_corp and not re.search(r"state\s+code", m_corp.group(1), re.I):
+                vendor_name = m_corp.group(1).strip()
+
+    # Buyer Name
+    if buyer_gstin:
+        m_buyer_prec = re.search(r"([^\n\r]+)[\n\r]+(?:GSTIN\s*[:\-\s]*)?" + re.escape(buyer_gstin), text, re.I)
+        if m_buyer_prec and not re.search(r"supplier|recipient|billed|invoice|customer|buyer|state|place", m_buyer_prec.group(1), re.I):
+            b_name = m_buyer_prec.group(1).strip()
+            if len(b_name) > 3:
+                buyer_name = b_name
+
+    if not buyer_name:
+        m_buyer = re.search(r"(?:BILLED\s*TO\s*(?:\([^\)]+\))?|RECIPIENT\s*(?:\([^\)]+\))?|BUYER|CUSTOMER)\s*[\n\r\s:]+([^\n\r]+)", text, re.I)
+        if m_buyer and not re.search(r"(?:address|gstin|state|tax|invoice|bill\s+from)", m_buyer.group(1), re.I):
+            buyer_name = m_buyer.group(1).strip()
+        else:
+            m_buyer_alt = re.search(r"(?:BUYER|CUSTOMER|RECIPIENT)[^\n\r:]*[:\-\n\s]+([A-Za-z0-9\s&\.\'-]{3,50})", text, re.I)
+            if m_buyer_alt and not re.search(r"(?:bill\s+from|bill\s+to)", m_buyer_alt.group(1), re.I):
+                buyer_name = m_buyer_alt.group(1).strip()
 
     # 5. Amounts and Taxes
     subtotal = None
@@ -128,31 +147,33 @@ def parse_invoice_text(text: str) -> Dict[str, Any]:
     tax_rate = 18.0
 
     # Subtotal (Taxable Amount)
-    m_sub = re.search(r"(?:Total\s*Taxable\s*Value|Taxable\s*(?:Amount|Value)|Subtotal)\s*[:\-\s]*\n*(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)", text, re.I)
+    m_sub = re.search(r"(?:Total\s*Taxable\s*Value|Taxable\s*(?:Amount|Value)|Subtotal)[^\n\r:]*[:\-]\s*\n*(?:Rs\.?|INR|₹|■|[^\d\s\n\r])?\s*([\d,]+\.?\d*)", text, re.I)
+    if not m_sub:
+        m_sub = re.search(r"(?:Total\s*Taxable\s*Value|Taxable\s*(?:Amount|Value)|Subtotal)\s*[:\-\s]*\n*(?:Rs\.?|INR|₹|■|[^\d\s\n\r])?\s*([\d,]+\.?\d*)", text, re.I)
     if m_sub:
         try:
             subtotal = float(m_sub.group(1).replace(",", ""))
         except ValueError:
             pass
 
-    # CGST
-    m_cgst = re.search(r"(?:Total\s*CGST|CGST)[^\n\r:]*[:\-\s]*\n*(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)", text, re.I)
+    # CGST (Must not match 'CGST Act')
+    m_cgst = re.search(r"(?:Total\s*CGST|\bCentral\s*GST|\bCGST\b(?!\s*Act|\s*Rules))[^\n\r:]*[:\-]\s*\n*(?:Rs\.?|INR|₹|■|[^\d\s\n\r])?\s*([\d,]+\.?\d*)", text, re.I)
     if m_cgst:
         try:
             cgst_amount = float(m_cgst.group(1).replace(",", ""))
         except ValueError:
             pass
 
-    # SGST
-    m_sgst = re.search(r"(?:Total\s*SGST|SGST)[^\n\r:]*[:\-\s]*\n*(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)", text, re.I)
+    # SGST (Must not match 'SGST Act')
+    m_sgst = re.search(r"(?:Total\s*SGST|\bState\s*GST|\bSGST\b(?!\s*Act|\s*Rules))[^\n\r:]*[:\-]\s*\n*(?:Rs\.?|INR|₹|■|[^\d\s\n\r])?\s*([\d,]+\.?\d*)", text, re.I)
     if m_sgst:
         try:
             sgst_amount = float(m_sgst.group(1).replace(",", ""))
         except ValueError:
             pass
 
-    # IGST
-    m_igst = re.search(r"(?:Total\s*IGST|IGST)[^\n\r:]*[:\-\s]*\n*(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)", text, re.I)
+    # IGST (Must not match 'IGST Act')
+    m_igst = re.search(r"(?:Total\s*IGST|\bIntegrated\s*GST|\bIGST\b(?!\s*Act|\s*Rules))[^\n\r:]*[:\-]\s*\n*(?:Rs\.?|INR|₹|■|[^\d\s\n\r])?\s*([\d,]+\.?\d*)", text, re.I)
     if m_igst:
         try:
             igst_amount = float(m_igst.group(1).replace(",", ""))
@@ -160,7 +181,7 @@ def parse_invoice_text(text: str) -> Dict[str, Any]:
             pass
 
     # Total Payable / Invoice Total
-    m_tot = re.search(r"(?:Grand\s*Total|Total\s*Payable|Invoice\s*Total|Total\s*Amount)\s*[:\-\s]*\n*(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)", text, re.I)
+    m_tot = re.search(r"(?:Grand\s*Total|Total\s*Payable|Invoice\s*Total|TOTAL\s*INVOICE\s*VALUE|Total\s*Amount)\s*[:\-\s]*\n*(?:Rs\.?|INR|₹|■|[^\d\s\n\r])?\s*([\d,]+\.?\d*)", text, re.I)
     if m_tot:
         try:
             total_payable = float(m_tot.group(1).replace(",", ""))

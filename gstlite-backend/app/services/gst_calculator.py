@@ -62,10 +62,15 @@ def build_gst_summary(invoices: list[Invoice], period: str) -> dict:
         bucket["taxable_value"] += taxable
         bucket["tax_amount"] += tax
 
-    # --- Input tax credit (from purchase invoices ONLY) ---
+    # --- Input tax credit (from ELIGIBLE purchase invoices ONLY) ---
+    # Under CGST Section 17(5) & Rule 36(4), flagged/blocked invoices cannot be used to offset output liability
+    eligible_purchase_invoices = [
+        i for i in purchase_invoices
+        if getattr(i.status, "value", i.status) != "flagged"
+    ]
     input_tax_credit = 0.0
     input_slabs: dict[float, dict] = {}
-    for inv in purchase_invoices:
+    for inv in eligible_purchase_invoices:
         taxable, tax = _get_invoice_tax_breakdown(inv)
         input_tax_credit += tax
         bucket = input_slabs.setdefault(inv.tax_rate, {"taxable_value": 0.0, "tax_amount": 0.0})

@@ -54,6 +54,15 @@ async function request(path, { method = "GET", body, isForm = false, auth = true
   }
 
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      clearToken();
+      if (
+        !window.location.pathname.startsWith("/login") &&
+        !window.location.pathname.startsWith("/register")
+      ) {
+        window.location.href = "/login";
+      }
+    }
     const message = data?.detail || `Request failed (${res.status})`;
     throw new ApiError(typeof message === "string" ? message : JSON.stringify(message), res.status);
   }
@@ -91,6 +100,11 @@ export const invoices = {
   list: (period) => request(`/api/invoices${period ? `?period=${period}` : ""}`),
   get: (id) => request(`/api/invoices/${id}`),
   update: (id, payload) => request(`/api/invoices/${id}`, { method: "PATCH", body: payload }),
+  delete: (id) => request(`/api/invoices/${id}`, { method: "DELETE" }),
+  clear: (period, scope = "all") =>
+    request(`/api/invoices${period ? `?period=${encodeURIComponent(period)}&scope=${scope}` : `?scope=${scope}`}`, {
+      method: "DELETE",
+    }),
   getFileBlob: async (id) => {
     const token = getToken();
     const headers = {};
@@ -119,6 +133,8 @@ export const compliance = {
     form.append("period", period);
     return request("/api/compliance/gstr2b/demo", { method: "POST", body: form, isForm: true });
   },
+  claimUnclaimed2b: () =>
+    request("/api/compliance/gstr2b/claim-unclaimed", { method: "POST" }),
   optimization: (period) =>
     request(`/api/compliance/optimization${period ? `?period=${period}` : ""}`),
 };

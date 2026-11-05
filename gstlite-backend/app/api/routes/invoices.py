@@ -93,7 +93,8 @@ def _process_invoice_background(invoice_id: str, business_id: str):
 
             # Run Multi-Agent Manager pipeline directly
             manager = ManagerAgent()
-            result = manager.process_invoice(invoice.file_path, known_2b_gstins, business=business)
+            doc_type_hint = getattr(invoice.document_type, "value", str(invoice.document_type))
+            result = manager.process_invoice(invoice.file_path, known_2b_gstins, business=business, document_type=doc_type_hint)
 
             # Assign extracted fields safely using getattr
             invoice.invoice_number = getattr(result, "invoice_number", None)
@@ -111,6 +112,18 @@ def _process_invoice_background(invoice_id: str, business_id: str):
             invoice.amount = getattr(result, "amount", None) or getattr(result, "total_amount", None)
             invoice.tax_rate = getattr(result, "tax_rate", None)
             invoice.hsn_code = getattr(result, "hsn_code", None)
+
+            # Auto-detect sales vs purchase based on extracted entities:
+            # If our registered business GSTIN is the vendor, this is an outward supply (sales)
+            biz_gstin = (business.gstin or "").strip().upper() if business else ""
+            v_gstin = (invoice.vendor_gstin or "").strip().upper()
+            b_gstin = (invoice.buyer_gstin or "").strip().upper()
+            if biz_gstin and v_gstin == biz_gstin and (not b_gstin or b_gstin != biz_gstin):
+                invoice.document_type = DocumentType.sales
+            elif "sale" in (invoice.original_filename or "").lower():
+                invoice.document_type = DocumentType.sales
+            elif biz_gstin and b_gstin == biz_gstin and (not v_gstin or v_gstin != biz_gstin):
+                invoice.document_type = DocumentType.purchase
 
             # Map status and risk levels safely
             status_val = getattr(result, "status", "validated")
@@ -163,12 +176,19 @@ def upload_invoice(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    fname_lower = (file.filename or "").lower()
+    doc_type = document_type
+    if "sale" in fname_lower or "outward" in fname_lower:
+        doc_type = DocumentType.sales
+    elif "purchase" in fname_lower or "inward" in fname_lower:
+        doc_type = DocumentType.purchase
+
     invoice = Invoice(
         business_id=business.id,
         display_id=_next_display_id(db, business.id),
         file_path=file_path,
         original_filename=file.filename or "invoice",
-        document_type=document_type,
+        document_type=doc_type,
         status=InvoiceStatus.uploaded,
     )
     db.add(invoice)
@@ -321,3 +341,87 @@ def get_invoice_file(
         media_type=mime_type,
         filename=invoice.original_filename,
     )
+
+
+@router.delete("")
+def clear_invoices(
+    period: Optional[str] = None,
+    scope: Optional[str] = "all",
+    business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db),
+):
+    """
+    Clears invoices for the business, optionally scoped by filing period (e.g. '2026-08').
+    Enables re-uploading and demonstrating fresh ingestion without needing a new account.
+    """
+    from app.api.routes.gst import _matches_period
+    from app.db.models import ComplianceIssue, Invoice, SalesInvoice
+
+    all_invoices = db.query(Invoice).filter(Invoice.business_id == business.id).all()
+    if period and period.lower() != "all":
+        target_invoices = [i for i in all_invoices if _matches_period(i, period)]
+    else:
+        target_invoices = all_invoices
+
+    invoice_ids = [i.id for i in target_invoices]
+
+    # Delete associated compliance issues
+    if invoice_ids:
+        db.query(ComplianceIssue).filter(ComplianceIssue.invoice_id.in_(invoice_ids)).delete(synchronize_session=False)
+        for inv in target_invoices:
+            try:
+                if inv.file_path and os.path.exists(inv.file_path) and "uploads" in inv.file_path:
+                    os.remove(inv.file_path)
+            except Exception:
+                pass
+            db.delete(inv)
+
+    # If requested, also clear sales invoices for the period
+    deleted_sales = 0
+    if scope in ("all", "sales"):
+        sales_q = db.query(SalesInvoice).filter(SalesInvoice.business_id == business.id)
+        if period and period.lower() != "all":
+            all_sales = sales_q.all()
+            for s in all_sales:
+                s_date = str(s.invoice_date or s.created_at or "")
+                if period in s_date:
+                    db.delete(s)
+                    deleted_sales += 1
+        else:
+            deleted_sales = sales_q.count()
+            sales_q.delete(synchronize_session=False)
+
+    db.commit()
+
+    return {
+        "message": f"Successfully cleared {len(target_invoices)} invoices and {deleted_sales} sales records.",
+        "deleted_invoices": len(target_invoices),
+        "deleted_sales": deleted_sales,
+        "total_deleted": len(target_invoices) + deleted_sales,
+        "period": period or "all",
+    }
+
+
+@router.delete("/{invoice_id}")
+def delete_single_invoice(
+    invoice_id: str,
+    business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db),
+):
+    """Deletes a single invoice by ID."""
+    from app.db.models import ComplianceIssue, Invoice
+
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id, Invoice.business_id == business.id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    db.query(ComplianceIssue).filter(ComplianceIssue.invoice_id == inv.id).delete(synchronize_session=False)
+    try:
+        if inv.file_path and os.path.exists(inv.file_path) and "uploads" in inv.file_path:
+            os.remove(inv.file_path)
+    except Exception:
+        pass
+
+    db.delete(inv)
+    db.commit()
+    return {"message": "Invoice deleted successfully", "id": invoice_id}

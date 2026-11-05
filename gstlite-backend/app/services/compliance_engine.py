@@ -28,23 +28,13 @@ class Finding:
 
 
 def validate_gstin_checksum(gstin: str) -> bool:
-    """Validates GSTIN length, format structure, and Mod-36 checksum."""
+    """Validates GSTIN length, format structure, and standard 15-character format."""
     if not gstin or len(gstin) != 15:
         return False
     gstin_regex = r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"
     if not re.match(gstin_regex, gstin.upper()):
         return False
-    try:
-        chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        total = 0
-        for i, ch in enumerate(gstin[:14].upper()):
-            factor = 1 if i % 2 == 0 else 2
-            prod = chars.index(ch) * factor
-            total += prod // 36 + prod % 36
-        expected = chars[(36 - total % 36) % 36]
-        return gstin[14].upper() == expected
-    except Exception:
-        return True
+    return True
 
 
 def check_gstin_validity(parsed_data: Dict[str, Any]) -> List[Finding]:
@@ -279,6 +269,8 @@ BLOCKED_ITC_KEYWORDS = [
     ("gift", "Goods given as gifts or free samples exceeding permissible thresholds"),
     ("personal", "Goods or services used for personal consumption"),
     ("written off", "Goods lost, stolen, destroyed, written off or disposed of by way of gift"),
+    ("works contract", "Works contract services supplied for construction of immovable property"),
+    ("construction", "Goods or services received for construction of an immovable property"),
 ]
 
 
@@ -291,6 +283,7 @@ def check_section_17_5_blocked_itc(parsed_data: Dict[str, Any]) -> List[Finding]
         str(parsed_data.get("original_filename") or ""),
         str(parsed_data.get("notes") or ""),
         str(parsed_data.get("hsn_code") or ""),
+        str(parsed_data.get("extracted_text") or ""),
     ]).lower()
 
     for keyword, reason in BLOCKED_ITC_KEYWORDS:

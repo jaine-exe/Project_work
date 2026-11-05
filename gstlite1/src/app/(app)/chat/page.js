@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Topbar from "@/components/Topbar";
 import { chatSeed, chatSuggestions } from "@/lib/mock-data";
 import { chat as chatApi } from "@/lib/api";
+import FormattedMessage from "@/components/FormattedMessage";
 import { Send, Sparkles, ShieldCheck, BookOpen, Trash2 } from "lucide-react";
 
 const CANNED_REPLIES = {
@@ -110,7 +111,7 @@ export default function ChatPage() {
                 </span>
               )}
               <div
-                className="rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap"
+                className="rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%]"
                 style={{
                   background: m.role === "user" ? "var(--primary)" : "var(--surface)",
                   color: m.role === "user" ? "white" : "var(--ink)",
@@ -119,7 +120,7 @@ export default function ChatPage() {
                   borderBottomLeftRadius: m.role === "assistant" ? 4 : undefined,
                 }}
               >
-                {m.content}
+                <FormattedMessage content={m.content} isUser={m.role === "user"} />
                 {m.role === "assistant" && i !== 0 && (
                   <div
                     className="flex items-center gap-1.5 mt-2.5 pt-2.5 text-[11px]"

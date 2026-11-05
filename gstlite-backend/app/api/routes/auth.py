@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_business, get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.database import get_db
 from app.db.models import Business, User
@@ -55,6 +55,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
+    get_current_business(user, db)
     token = create_access_token({"sub": user.id})
     return TokenResponse(access_token=token)
 
@@ -66,13 +67,20 @@ def login_json(payload: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
+    get_current_business(user, db)
     token = create_access_token({"sub": user.id})
     return TokenResponse(access_token=token)
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)):
-    return current_user
+def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    biz = get_current_business(current_user, db)
+    return UserOut(
+        id=current_user.id,
+        full_name=current_user.full_name,
+        email=current_user.email,
+        business=biz,
+    )
 
 
 @router.get("/demo-accounts", response_model=list[DemoAccountOut])
@@ -134,10 +142,10 @@ def switch_active_business(
     if not target:
         raise HTTPException(status_code=404, detail="Business not found")
 
-    # Re-assign or link target business to current user
-    target.owner_id = current_user.id
+    # Set this business as the active context for current user
+    current_user.active_business_id = target.id
     db.commit()
-    db.refresh(target)
+    db.refresh(current_user)
 
     return {
         "message": f"Switched active business to {target.name}",

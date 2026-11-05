@@ -5,7 +5,7 @@ import Topbar from "@/components/Topbar";
 import PipelineStepper from "@/components/PipelineStepper";
 import StatusPill from "@/components/StatusPill";
 import { invoices as invoicesApi } from "@/lib/api";
-import { UploadCloud, FileText, X, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
+import { UploadCloud, FileText, X, CheckCircle2, Loader2, AlertTriangle, Trash2, RotateCcw } from "lucide-react";
 
 // Maps backend invoice status -> pipeline stage key used by PipelineStepper
 const STATUS_TO_STAGE = {
@@ -37,7 +37,27 @@ export default function UploadPage() {
   const [files, setFiles] = useState([]);
   const [docType, setDocType] = useState("purchase"); // "purchase" | "sales"
   const [isDragging, setDragging] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearMessage, setClearMessage] = useState("");
   const inputRef = useRef(null);
+
+  async function handleClearPeriodInvoices() {
+    if (!window.confirm("Are you sure you want to clear all entered invoices for August 2026? This enables you to upload fresh files and demonstrate the ingestion pipeline from scratch.")) {
+      return;
+    }
+    setClearing(true);
+    setClearMessage("");
+    try {
+      const res = await invoicesApi.clear("2026-08");
+      setFiles([]);
+      setClearMessage(`Cleared ${res.deleted_invoices || 0} invoice(s) and reset calculations. Ready for fresh upload.`);
+      setTimeout(() => setClearMessage(""), 5000);
+    } catch (err) {
+      alert("Failed to clear invoices: " + (err.message || err));
+    } finally {
+      setClearing(false);
+    }
+  }
 
   const patchFile = useCallback((localId, patch) => {
     setFiles((prev) => prev.map((f) => (f.localId === localId ? { ...f, ...patch } : f)));
@@ -152,6 +172,39 @@ export default function UploadPage() {
             </button>
           </div>
         </div>
+
+        {/* Clear / Reset Banner for Testing */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/80">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <Trash2 size={14} />
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-slate-800">
+                Live Demo & Testing Reset
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Clear entered invoices for this period to demonstrate invoice uploads and OCR extraction fresh.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleClearPeriodInvoices}
+            disabled={clearing}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-100/60 border border-rose-200 transition-colors shrink-0 cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+          >
+            {clearing ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            {clearing ? "Clearing..." : "Clear August Invoices"}
+          </button>
+        </div>
+
+        {clearMessage && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-medium text-emerald-800 flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+            <span>{clearMessage}</span>
+          </div>
+        )}
 
         <div
           onDragOver={(e) => {

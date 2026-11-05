@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Auth
     SECRET_KEY: str = "dev-secret-change-me-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days for local development
 
     # File storage
     UPLOAD_DIR: str = "uploads"

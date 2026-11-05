@@ -1,0 +1,88 @@
+{
+  "gstin": "32AAECS1234F1Z5",
+  "fp": "082026",
+  "generation_date": "2026-08-14",
+  "b2b": [
+    {
+      "ctin": "32AACCA1234F1Z5",
+      "trdnm": "Malabar Dyes & Chemical Co.",
+      "sup_type": "Regular",
+      "inv": [
+        {
+          "inum": "INV-2026-0729",
+          "idt": "2026-08-10",
+          "val": 59000.0,
+          "itcavl": "Y",
+          "pos": "32",
+          "items": [
+            {
+              "num": 1,
+              "itm_det": {
+                "txval": 50000.0,
+                "rt": 18.0,
+                "camt": 4500.0,
+                "samt": 4500.0,
+                "iamt": 0.0,
+                "csamt": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "29AABFM3345L1Z2",
+      "trdnm": "Mysore Timber Works",
+      "sup_type": "Regular",
+      "inv": [
+        {
+          "inum": "MTW/26-27/0318",
+          "idt": "2026-08-18",
+          "val": 99120.0,
+          "itcavl": "Y",
+          "pos": "32",
+          "items": [
+            {
+              "num": 1,
+              "itm_det": {
+                "txval": 84000.0,
+                "rt": 18.0,
+                "camt": 0.0,
+                "samt": 0.0,
+                "iamt": 15120.0,
+                "csamt": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "32AAECS9876P1Z3",
+      "trdnm": "Southern Steel Tubes Ltd.",
+      "sup_type": "Regular",
+      "inv": [
+        {
+          "inum": "SST-2026-441",
+          "idt": "2026-08-08",
+          "val": 41300.0,
+          "itcavl": "Y",
+          "pos": "32",
+          "items": [
+            {
+              "num": 1,
+              "itm_det": {
+                "txval": 35000.0,
+                "rt": 18.0,
+                "camt": 3150.0,
+                "samt": 3150.0,
+                "iamt": 0.0,
+                "csamt": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

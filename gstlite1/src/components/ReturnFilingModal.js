@@ -465,9 +465,19 @@ export default function ReturnFilingModal({
                     Push GSTR-3B directly to the government portal via authenticated API without manual file uploading.
                   </p>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 uppercase tracking-wider">
-                  Live Sandbox
-                </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`/mock-portal?business_name=${encodeURIComponent(business?.name || "")}&gstin=${encodeURIComponent(cleanGstin || "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-[#003366] text-white hover:bg-[#002244] shadow-xs transition-colors"
+                  >
+                    <ExternalLink size={12} /> Open Mock GST Portal
+                  </a>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 uppercase tracking-wider">
+                    Live Sandbox
+                  </span>
+                </div>
               </div>
 
               {portalError && (

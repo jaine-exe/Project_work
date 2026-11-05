@@ -42,6 +42,7 @@ class ManagerAgent:
         file_path: str,
         known_2b_gstins: Optional[Any] = None,
         business: Optional[Any] = None,
+        document_type: Optional[str] = None,
     ) -> PipelineResult:
         safe_gstins = set()
         if known_2b_gstins:
@@ -68,6 +69,17 @@ class ManagerAgent:
             parsed_data["vendor_name"] = f"Vendor ({filename})"
 
         parsed_data["extracted_text"] = extracted_text
+
+        # Determine document type (sales vs purchase)
+        basename_lower = os.path.basename(file_path).lower()
+        if document_type:
+            parsed_data["document_type"] = document_type
+        elif "sale" in basename_lower or "outward" in basename_lower:
+            parsed_data["document_type"] = "sales"
+        elif business and business.gstin and parsed_data.get("vendor_gstin") == business.gstin:
+            parsed_data["document_type"] = "sales"
+        else:
+            parsed_data["document_type"] = "purchase"
 
         compliance_res = run_all_checks(
             parsed_data,
@@ -139,17 +151,30 @@ def answer_question(
     question: str,
     context: Optional[str] = None,
     history: Optional[List[Dict[str, str]]] = None,
+    max_tokens: int = 2500,
 ) -> str:
     groq_key = os.getenv("GROQ_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
 
     system_prompt = (
-        "You are an expert Indian GST Tax and Compliance Assistant.\n\n"
-        "Communication Rules:\n"
-        "- If the user says a greeting ('hi', 'hello', 'hlo') or simple acknowledgment ('ok', 'thanks'), respond briefly and warmly.\n"
-        "- Only reference the invoice context if the user's question relates to their specific invoices, vendors, or filing records. For general GST principles, definitions, or queries, explain clearly without forcing invoice details.\n"
-        "- Provide direct, clear, actionable explanations.\n"
-        "- Format bullet points cleanly on new lines using Markdown."
+        "You are GST Lite's friendly, expert Indian GST Tax and Compliance Advisor.\n\n"
+        "MANDATORY STATUTORY GROUND TRUTH (UP-TO-DATE GST STRUCTURE):\n"
+        "- Effective from 22 September 2025 (notified by the 56th GST Council meeting in New Delhi), India's GST rate slabs were overhauled under GST 2.0 rate rationalization.\n"
+        "- The old 12% and 28% slabs have been largely PHASED OUT and restructured.\n"
+        "- When the user asks about GST rate slabs or tax rates, you MUST ALWAYS provide this up-to-date post-September 2025 structure:\n"
+        "  1. Nil / Exempt (0%): Fresh unbranded food items, lifesaving medicines, and individual health & life insurance policies (exempted from earlier 18%).\n"
+        "  2. Merit / Low Rate (5%): Farm equipment, tractors, irrigation tools, essential generic medicines, and basic packaged groceries (items shifted down from the former 12% bracket).\n"
+        "  3. Standard Rate (18%): The unified standard rate for the vast majority of goods and services: electronics, IT/telecom, appliances, automobiles up to certain cc, and construction.\n"
+        "  4. Demerit / Luxury Rate (40%): Luxury cars, SUVs, heavy motorcycles (>350cc), private yachts, aircraft, and aerated/caffeinated drinks (merging the previous 28% + Compensation Cess).\n"
+        "- Always clearly explain that the previous 12% and 28% slabs were phased out on 22 September 2025 to eliminate inverted duty disputes and simplify the tax code.\n\n"
+        "Core Instructions:\n"
+        "1. Simple & Clear Language: Explain GST rules in plain, simple English that any shopkeeper, student, or small business owner can easily understand.\n"
+        "2. Direct Answers: Answer the EXACT question asked directly in the first 1-2 sentences.\n"
+        "3. Real-World Examples: When explaining a tax concept, always give a short, practical everyday example (e.g., 'For example: If you buy raw materials for ₹10,000...').\n"
+        "4. Clean Formatting: Organize your reply with clear section headers, clean bullet points, or numbered steps. Never clutter text.\n"
+        "5. Tables for Comparison: When comparing items or listing tax slabs, format them using clean Markdown tables (| Slab Tier | Rate | Typical Goods & Services | Notes |).\n"
+        "6. Greetings: If the user says hello or greets you, reply warmly and ask how you can help them with their GST compliance today.\n"
+        "7. Context: Only refer to specific invoices or vendor numbers if the user asks about them."
     )
 
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
@@ -173,7 +198,7 @@ def answer_question(
                 model=model_name,
                 messages=messages,
                 temperature=0.5,
-                max_tokens=800,
+                max_tokens=max_tokens,
             )
             content = completion.choices[0].message.content
             if content and content.strip():
@@ -190,7 +215,7 @@ def answer_question(
                 model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.5,
-                max_tokens=800,
+                max_tokens=max_tokens,
             )
             content = completion.choices[0].message.content
             if content and content.strip():
@@ -200,6 +225,20 @@ def answer_question(
 
     # Fallback if no LLM is reachable
     q_lower = question.lower().strip()
+    if any(k in q_lower for k in ["slab", "rate", "tax rate", "gst rate"]):
+        return (
+            "**Current GST Rate Slabs (Effective 22 September 2025):**\n\n"
+            "| Slab Tier | Rate | Typical Goods & Services | Notes |\n"
+            "|---|---|---|---|\n"
+            "| Nil / Exempt | **0%** | Fresh unbranded food items, lifesaving medicines, individual health & life insurance policies | Fully exempt (insurance exempted from earlier 18%) |\n"
+            "| Merit / Low | **5%** | Farm equipment, tractors, irrigation tools, essential generic medicines, basic packaged groceries | Shifted down from former 12% bracket |\n"
+            "| Standard | **18%** | Electronics, IT/telecom, appliances, automobiles (standard), construction work, most services | Unified standard rate for majority of goods |\n"
+            "| Demerit / Luxury | **40%** | Luxury cars, SUVs, heavy motorcycles (>350cc), private aircraft, aerated/caffeinated drinks | Merged former 28% + Compensation Cess |\n\n"
+            "### Quick Explanation\n"
+            "- The **12%** and **28%** slabs were **phased out on 22 September 2025** by the 56th GST Council to eliminate inverted duty structures and simplify compliance.\n"
+            "- All goods and services previously in the 12% or 28% tiers have been rationalized into the 0%, 5%, 18%, or 40% brackets."
+        )
+
     if q_lower in ["ok", "okay", "thanks", "thank you", "got it"]:
         return "Sounds good! Let me know if you need help with any specific invoice or filing."
     if any(q_lower.startswith(g) for g in ["hi", "hello", "hey", "hlo"]):

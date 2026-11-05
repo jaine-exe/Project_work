@@ -7,7 +7,7 @@ import StatusPill from "@/components/StatusPill";
 import InvoiceReviewModal from "@/components/InvoiceReviewModal";
 import ReturnFilingModal from "@/components/ReturnFilingModal";
 import { gst as gstApi, invoices as invoicesApi, auth as authApi, returns as returnsApi } from "@/lib/api";
-import { Download, FileCheck2, ChevronDown, Loader2, Edit3, Eye, ShieldCheck, Lock, Globe } from "lucide-react";
+import { Download, FileCheck2, ChevronDown, Loader2, Edit3, Eye, ShieldCheck, Lock, Globe, ExternalLink } from "lucide-react";
 
 export default function GstSummaryPage() {
   const [periods, setPeriods] = useState(["2026-08", "2026-07", "2026-06"]);
@@ -130,6 +130,14 @@ export default function GstSummaryPage() {
               selectedPeriod={selectedPeriod}
               onChange={setSelectedPeriod}
             />
+            <a
+              href={`/mock-portal?business_name=${encodeURIComponent(business?.name || "")}&gstin=${encodeURIComponent(business?.gstin || "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#003366] bg-white hover:bg-slate-50 border border-slate-300 shadow-xs transition-colors"
+            >
+              <ExternalLink size={13} /> Open Mock GST Portal
+            </a>
             <button
               onClick={() => setShowFilingModal(true)}
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm hover:opacity-95 transition-all cursor-pointer"

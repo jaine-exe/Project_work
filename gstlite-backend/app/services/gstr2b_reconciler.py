@@ -338,6 +338,22 @@ def get_reconciliation_report(
         .all()
     )
 
+    if not gstr2b_entries:
+        # Fallback to latest available period with 2B data for this business
+        latest_entry = (
+            db.query(Gstr2bEntry)
+            .filter(Gstr2bEntry.business_id == business_id)
+            .order_by(Gstr2bEntry.period.desc())
+            .first()
+        )
+        if latest_entry:
+            period = latest_entry.period
+            gstr2b_entries = (
+                db.query(Gstr2bEntry)
+                .filter(Gstr2bEntry.business_id == business_id, Gstr2bEntry.period == period)
+                .all()
+            )
+
     # Index 2B records by (clean_gstin, clean_inv_num) and clean_gstin
     by_gstin_and_num: Dict[str, Gstr2bEntry] = {}
     by_gstin: Dict[str, List[Gstr2bEntry]] = {}
@@ -357,23 +373,35 @@ def get_reconciliation_report(
 
     for inv in purchase_invoices:
         v_gstin = _clean_str(inv.vendor_gstin)
-        inv_num = _clean_str(inv.display_id)
 
-        # 1. Exact match on GSTIN + Invoice Number
-        key = f"{v_gstin}_{inv_num}"
-        entry = by_gstin_and_num.get(key)
+        # 1. Exact match on GSTIN + Invoice Number (checking parsed invoice_number first, then display_id)
+        candidate_keys = []
+        if inv.invoice_number:
+            candidate_keys.append(f"{v_gstin}_{_clean_str(inv.invoice_number)}")
+        if inv.display_id:
+            candidate_keys.append(f"{v_gstin}_{_clean_str(inv.display_id)}")
 
-        # 2. Or fallback: match on vendor GSTIN if amount is within ₹10
+        entry = None
+        for k in candidate_keys:
+            cand = by_gstin_and_num.get(k)
+            if cand and cand.id not in matched_2b_ids:
+                entry = cand
+                break
+
+        # 2. Or fallback: match on vendor GSTIN if amount or tax is within ₹10
         if not entry and v_gstin in by_gstin:
             for candidate in by_gstin[v_gstin]:
-                if candidate.id not in matched_2b_ids and inv.amount:
-                    if abs((candidate.invoice_value or 0) - inv.amount) < 10.0:
+                if candidate.id not in matched_2b_ids:
+                    val_diff = abs((candidate.invoice_value or 0) - (inv.amount or 0))
+                    txval_diff = abs((candidate.taxable_value or 0) - (inv.taxable_amount or 0)) if inv.taxable_amount else 999
+                    tax_diff = abs((candidate.tax_amount or 0) - (inv.total_tax or 0)) if inv.total_tax else 999
+                    if val_diff <= 10.0 or txval_diff <= 10.0 or tax_diff <= 10.0:
                         entry = candidate
                         break
 
         if entry:
             matched_2b_ids.add(entry.id)
-            inv_tax = round((inv.amount or 0) - ((inv.amount or 0) / 1.18), 2)
+            inv_tax = round(float(inv.total_tax), 2) if inv.total_tax is not None else round((inv.amount or 0) - ((inv.amount or 0) / 1.18), 2)
             entry_tax = round(entry.tax_amount or 0, 2)
             val_diff = abs((inv.amount or 0) - (entry.invoice_value or 0))
 

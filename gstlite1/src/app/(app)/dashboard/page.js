@@ -14,7 +14,7 @@ import {
   invoices as invoicesApi,
   auth as authApi,
 } from "@/lib/api";
-import { UploadCloud, MessageCircleMore, ArrowRight, AlertTriangle, Loader2, Edit3 } from "lucide-react";
+import { UploadCloud, MessageCircleMore, ArrowRight, AlertTriangle, Loader2, Edit3, Trash2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 
 const STATUS_TO_STAGE = {
@@ -37,6 +37,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reviewInvoice, setReviewInvoice] = useState(null);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  async function handleClearMonthInvoices() {
+    setClearing(true);
+    try {
+      const res = await invoicesApi.clear(selectedPeriod);
+      setShowClearModal(false);
+      const [readinessData, summaryData, invoicesData, issuesData] = await Promise.all([
+        complianceApi.readiness(),
+        gstApi.summary(selectedPeriod),
+        invoicesApi.list(selectedPeriod),
+        complianceApi.issues("high"),
+      ]);
+      setReadiness(readinessData);
+      setSummary(summaryData);
+      setInvoiceList(invoicesData.invoices);
+      setIssues(issuesData);
+    } catch (err) {
+      alert("Failed to clear invoices: " + (err.message || err));
+    } finally {
+      setClearing(false);
+    }
+  }
 
   function handleInvoiceUpdated(updated) {
     setInvoiceList((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
@@ -154,11 +178,21 @@ export default function DashboardPage() {
       <div>
         <Topbar title="Dashboard" />
         <div className="px-5 md:px-8 py-6">
-          <div className="card p-5" style={{ background: "var(--danger-light)" }}>
-            <p className="text-sm" style={{ color: "var(--danger)" }}>
-              {error} — is the backend running at{" "}
-              {process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}?
+          <div className="card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3" style={{ background: "var(--danger-light)" }}>
+            <p className="text-sm font-medium" style={{ color: "var(--danger)" }}>
+              {error.includes("credentials")
+                ? "Your login session has expired. Please log in again to continue."
+                : `${error} — is the backend running at ${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}?`}
             </p>
+            {error.includes("credentials") && (
+              <Link
+                href="/login"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white shadow-xs transition-opacity hover:opacity-90 shrink-0"
+                style={{ background: "var(--primary)" }}
+              >
+                Log In Again
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -221,14 +255,26 @@ export default function DashboardPage() {
                 {invoiceList.length} invoice{invoiceList.length === 1 ? "" : "s"} in this period.
               </p>
             </div>
-            <Link
-              href="/upload"
-              className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
-              style={{ background: "var(--primary)" }}
-            >
-              <UploadCloud size={16} />
-              Upload invoices
-            </Link>
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/upload"
+                className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
+                style={{ background: "var(--primary)" }}
+              >
+                <UploadCloud size={16} />
+                Upload invoices
+              </Link>
+              {invoiceList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowClearModal(true)}
+                  className="flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={13} />
+                  Clear {formatPeriodName(selectedPeriod)} Invoices
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -244,9 +290,22 @@ export default function DashboardPage() {
           <div className="card lg:col-span-2 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border-soft)" }}>
               <h3 className="font-display font-bold text-[15px]">Recent invoices</h3>
-              <Link href="/gst-summary" className="text-xs font-semibold flex items-center gap-1" style={{ color: "var(--primary)" }}>
-                View all <ArrowRight size={13} />
-              </Link>
+              <div className="flex items-center gap-3">
+                {invoiceList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClearModal(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                    title={`Clear invoices for ${formatPeriodName(selectedPeriod)}`}
+                  >
+                    <Trash2 size={13} />
+                    Clear month invoices
+                  </button>
+                )}
+                <Link href="/gst-summary" className="text-xs font-semibold flex items-center gap-1" style={{ color: "var(--primary)" }}>
+                  View all <ArrowRight size={13} />
+                </Link>
+              </div>
             </div>
             {recentInvoices.length === 0 ? (
               <div className="p-10 text-center">
@@ -358,6 +417,49 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Clear Month Invoices Confirmation Modal */}
+        {showClearModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="flex flex-col w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 border border-slate-100">
+              <div className="flex items-center gap-3 text-rose-600 mb-3">
+                <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-slate-900">
+                    Clear Invoices for {formatPeriodName(selectedPeriod)}?
+                  </h3>
+                  <p className="text-xs text-slate-500">Reset period data for testing & demos</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed mb-5">
+                This will remove <strong>{invoiceList.length} invoice(s)</strong> for{" "}
+                <strong>{formatPeriodName(selectedPeriod)}</strong> and reset Output Tax Liability and ITC calculations back to ₹0.
+                You can then upload invoices again and demonstrate the pipeline from scratch without creating a new account.
+              </p>
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowClearModal(false)}
+                  disabled={clearing}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearMonthInvoices}
+                  disabled={clearing}
+                  className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  {clearing ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                  {clearing ? "Clearing..." : "Yes, Clear Invoices"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {reviewInvoice && (
           <InvoiceReviewModal

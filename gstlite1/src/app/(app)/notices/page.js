@@ -19,6 +19,7 @@ import {
   TrendingUp,
   ShieldAlert,
   Building,
+  Eye,
 } from "lucide-react";
 
 export default function NoticesPage() {
@@ -48,6 +49,7 @@ export default function NoticesPage() {
   const [drafting, setDrafting] = useState(false);
   const [replyDraft, setReplyDraft] = useState("");
   const [copied, setCopied] = useState(false);
+  const [viewMode, setViewMode] = useState("formatted"); // "formatted" | "plain"
 
   useEffect(() => {
     loadData();
@@ -448,20 +450,49 @@ export default function NoticesPage() {
                   </p>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">Formal Legal Letterhead Draft</span>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("formatted")}
+                        className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                          viewMode === "formatted"
+                            ? "bg-white text-indigo-700 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        📄 Letterhead Document View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("plain")}
+                        className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                          viewMode === "plain"
+                            ? "bg-white text-indigo-700 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        📋 Plain Text
+                      </button>
+                    </div>
+
                     <button
                       onClick={handleCopyReply}
-                      className="text-xs font-semibold text-indigo-700 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-xs font-semibold text-indigo-700 hover:underline flex items-center gap-1 cursor-pointer self-end sm:self-auto"
                     >
                       {copied ? <Check size={13} /> : <Copy size={13} />}
                       {copied ? "Copied to Clipboard!" : "Copy Legal Text"}
                     </button>
                   </div>
-                  <pre className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap font-sans max-h-[50vh] overflow-y-auto leading-relaxed">
-                    {replyDraft || activeNotice.reply_draft}
-                  </pre>
+
+                  {viewMode === "formatted" ? (
+                    <LegalDocumentViewer rawText={replyDraft || activeNotice.reply_draft} />
+                  ) : (
+                    <pre className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap font-sans max-h-[50vh] overflow-y-auto leading-relaxed">
+                      {replyDraft || activeNotice.reply_draft}
+                    </pre>
+                  )}
                 </div>
               )}
 
@@ -486,4 +517,151 @@ export default function NoticesPage() {
     </div>
   );
 }
+
+function LegalDocumentViewer({ rawText }) {
+  if (!rawText) return null;
+
+  function renderInline(text) {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={i} className="font-bold text-slate-900">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+  }
+
+  const lines = rawText.split("\n");
+  const blocks = [];
+  let currentTable = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const line = rawLine.trim();
+
+    if (!line) {
+      if (currentTable) {
+        blocks.push({ type: "table", rows: currentTable });
+        currentTable = null;
+      }
+      continue;
+    }
+
+    // Check table row
+    if (line.startsWith("|") && line.endsWith("|")) {
+      const cells = line
+        .slice(1, -1)
+        .split("|")
+        .map((c) => c.trim());
+      const isDivider = cells.every((c) => /^:?-+:?$/.test(c));
+      if (!isDivider) {
+        if (!currentTable) currentTable = [];
+        currentTable.push(cells);
+      }
+      continue;
+    } else if (currentTable) {
+      blocks.push({ type: "table", rows: currentTable });
+      currentTable = null;
+    }
+
+    // Check heading
+    if (line.startsWith("#")) {
+      const level = (line.match(/^#+/) || ["#"])[0].length;
+      const title = line.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+      blocks.push({ type: "header", level, title });
+      continue;
+    }
+
+    // Check horizontal rule
+    if (/^[-=_]{3,}$/.test(line)) {
+      blocks.push({ type: "divider" });
+      continue;
+    }
+
+    // Check list item
+    if (line.startsWith("- ") || line.startsWith("• ") || line.startsWith("* ")) {
+      const itemText = line.replace(/^[-•*]\s*/, "");
+      blocks.push({ type: "list-item", text: itemText });
+      continue;
+    }
+
+    // Paragraph
+    blocks.push({ type: "paragraph", text: line });
+  }
+
+  if (currentTable) {
+    blocks.push({ type: "table", rows: currentTable });
+  }
+
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-slate-800 space-y-3 font-sans leading-relaxed text-xs max-h-[55vh] overflow-y-auto shadow-inner">
+      {blocks.map((block, idx) => {
+        if (block.type === "header") {
+          return (
+            <h4
+              key={idx}
+              className={`font-bold text-slate-900 tracking-tight pt-2 border-b pb-1 ${
+                block.level <= 2 ? "text-sm border-slate-300 font-display text-indigo-950" : "text-xs border-slate-200 text-slate-800"
+              }`}
+            >
+              {block.title}
+            </h4>
+          );
+        }
+        if (block.type === "divider") {
+          return <hr key={idx} className="my-2 border-slate-200" />;
+        }
+        if (block.type === "list-item") {
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-2">
+              <span className="text-indigo-500 font-bold mt-0.5">•</span>
+              <span className="flex-1">{renderInline(block.text)}</span>
+            </div>
+          );
+        }
+        if (block.type === "table") {
+          if (block.rows.length === 0) return null;
+          const [header, ...bodyRows] = block.rows;
+          return (
+            <div key={idx} className="overflow-x-auto my-3 border border-slate-200 rounded-lg shadow-sm bg-white">
+              <table className="w-full text-left text-[11px] border-collapse">
+                <thead className="bg-indigo-50/70 border-b border-indigo-100 text-indigo-950 font-bold">
+                  <tr>
+                    {header.map((col, cIdx) => (
+                      <th key={cIdx} className="p-2.5 border-r last:border-r-0 border-indigo-100">
+                        {renderInline(col)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {bodyRows.map((row, rIdx) => (
+                    <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
+                      {row.map((cell, cIdx) => (
+                        <td key={cIdx} className="p-2.5 border-r last:border-r-0 border-slate-200 align-top leading-normal text-slate-700">
+                          {renderInline(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return (
+          <p key={idx} className="text-slate-700">
+            {renderInline(block.text)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 
